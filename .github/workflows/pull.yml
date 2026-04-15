@@ -1,0 +1,20 @@
+name: Daily pull
+on:
+  schedule:
+    - cron: "0 12 * * *"  # 12:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  pull:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -e .
+      - run: python scripts/pull.py --days 7
+        env:
+          SIMPLEFIN_ACCESS_URL: ${{ secrets.SIMPLEFIN_ACCESS_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LEDGER_CATEGORIZATION_MODEL: claude-haiku-4-5-20251001
