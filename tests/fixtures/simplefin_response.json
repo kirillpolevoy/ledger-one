@@ -1,0 +1,18 @@
+{
+  "errors": ["some legacy error string"],
+  "errlist": [{"code": 1, "msg": "structured warning", "account_id": "ACC-001"}],
+  "accounts": [
+    {
+      "id": "ACC-001",
+      "name": "Chase Checking",
+      "currency": "USD",
+      "balance": "1234.56",
+      "balance-date": 1744704000,
+      "org": {"name": "Chase"},
+      "transactions": [
+        {"id": "TX-001", "posted": 1744617600, "amount": "-4.50",
+         "description": "STARBUCKS #1234 SEATTLE WA"}
+      ]
+    }
+  ]
+}
