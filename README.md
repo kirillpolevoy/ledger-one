@@ -35,6 +35,7 @@ Schema: [`scripts/schema.sql`](scripts/schema.sql). Pipeline: [`ledger_one/pull.
 Full walkthrough: [`SKILL.md`](SKILL.md).
 
 Never paste `SIMPLEFIN_ACCESS_URL`, `DATABASE_URL`, or API keys into chat or commit them to git. Put them directly into local env files or your deployment secret store.
+See [`SECURITY.md`](SECURITY.md) for reporting and secret-handling guidance.
 
 ## Extending
 

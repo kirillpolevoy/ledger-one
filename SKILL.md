@@ -37,4 +37,4 @@ Never ask the user to paste raw secrets into chat. `SIMPLEFIN_ACCESS_URL`, `DATA
 - **Query data:** `references/querying_data.md`.
 
 ## Extending
-See `references/extending.md` — private layer imports `ledger_one`, reads from the same DB, only writes to `category_overrides`.
+See `references/extending.md` — a separate app or analytics repo can import `ledger_one`, read from the same DB, and only write to `category_overrides`.

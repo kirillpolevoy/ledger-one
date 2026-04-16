@@ -4,8 +4,11 @@ __pycache__/
 .env
 .env.test
 .venv/
+.pytest_cache/
 dist/
 *.egg-info/
 *.csv
 !tests/fixtures/*.csv
 config/categories.yaml
+# Internal planning scratchpad; public docs live in references/.
+docs/

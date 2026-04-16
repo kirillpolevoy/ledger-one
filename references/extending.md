@@ -3,19 +3,19 @@
 `ledger-one` is the data layer only — no UI, no API, no opinions about how you query. The expected pattern is a **two-layer architecture**:
 
 1. **Public layer** (`ledger-one` repo): schema + pull pipeline + CLI. Install once, pull updates.
-2. **Private layer** (your repo): UI, dashboards, reports, custom analytics. Imports `ledger_one` as a library.
+2. **Companion layer** (your repo): UI, dashboards, reports, or custom analytics. Imports `ledger_one` as a library.
 
 ## Contract
 
-The private layer:
+The companion layer:
 - **Reads** freely from any table (`transactions`, `accounts`, `merchant_categories`).
 - **Writes** only to `category_overrides` (via `scripts/ledger_cli.py override add` or direct SQL).
 - **Updates** `transactions.category` when the user manually recategorizes — the DB trigger updates `merchant_categories` automatically.
 
-## Example: private dashboard repo
+## Example: companion dashboard repo
 
 ```python
-# private-dashboard/app.py
+# dashboard/app.py
 import os
 import psycopg
 from ledger_one.normalize import normalize_merchant  # reuse the public layer's normalizer
@@ -35,8 +35,8 @@ def recategorize(conn, tx_id: str, new_category: str):
                  (new_category, tx_id))
 ```
 
-Install `ledger_one` into the private project with `pip install -e /path/to/ledger-one` or vendor it as a git submodule. Both layers share the same `DATABASE_URL`.
+Install `ledger_one` into the companion project with `pip install -e /path/to/ledger-one` or vendor it as a git submodule. Both layers share the same `DATABASE_URL`.
 
 ## Schema migrations
 
-v1 has no migration framework. If `ledger-one` ships a v2 schema change, you'll apply it manually via SQL. The private layer should treat the schema as a stable contract and not depend on columns that aren't in `scripts/schema.sql`.
+v1 has no migration framework. If `ledger-one` ships a v2 schema change, you'll apply it manually via SQL. The companion layer should treat the schema as a stable contract and not depend on columns that aren't in `scripts/schema.sql`.
