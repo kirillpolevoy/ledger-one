@@ -18,6 +18,7 @@ def run_pull(
     anthropic_client,
     model: str,
     simplefin_fetcher=fetch_accounts_and_transactions,
+    dry_run: bool = False,
 ) -> dict:
     accounts, raw_txns, errors = simplefin_fetcher(access_url, days)
     for err in errors:
@@ -48,9 +49,15 @@ def run_pull(
         tx["category"] = cat
         tx["source"] = source
 
-    with db.transaction():
-        upsert_accounts(db, accounts)
-        inserted = insert_transactions(db, new_txns)
+    if dry_run:
+        log.info("Dry run — skipping database writes.")
+        for tx in new_txns:
+            log.info("  %s | %s | %s | %s", tx["posted_at"][:10], tx["description"][:40], tx["amount"], tx["category"])
+        inserted = 0
+    else:
+        with db.transaction():
+            upsert_accounts(db, accounts)
+            inserted = insert_transactions(db, new_txns)
 
     stats = {
         "accounts": len(accounts),
@@ -60,6 +67,7 @@ def run_pull(
         "learned_matches": sum(1 for _, s in results.values() if s == "learned"),
         "ai_calls": sum(1 for _, s in results.values() if s == "ai"),
         "inserted": inserted,
+        "dry_run": dry_run,
         "errors": errors,
     }
     log.info("pull stats: %s", stats)

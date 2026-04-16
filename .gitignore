@@ -2,8 +2,10 @@
 __pycache__/
 *.pyc
 .env
+.env.test
 .venv/
 dist/
 *.egg-info/
 *.csv
 !tests/fixtures/*.csv
+config/categories.yaml

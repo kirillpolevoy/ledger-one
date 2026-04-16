@@ -9,4 +9,4 @@
    - Option B (browser): open Neon SQL Editor, paste the contents of `scripts/schema.sql`, click Run.
 6. Verify: `psql "$DATABASE_URL" -c "\dt"` should list `accounts`, `transactions`, `merchant_categories`, `category_overrides`.
 
-**Backup branches:** Neon supports instant DB branching. Create a `test` branch in the console for throwaway test data (`TEST_DATABASE_URL` in `.env`).
+**Backup branches:** Neon supports instant DB branching. Create a dedicated `test` branch in the console for throwaway test data, then copy `.env.test.example` to `.env.test` and set `TEST_DATABASE_URL` there. Destructive DB tests refuse non-local URLs unless you explicitly set `LEDGER_ONE_ALLOW_DESTRUCTIVE_TEST_DB=1`.

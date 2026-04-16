@@ -16,16 +16,25 @@ A 3-tier categorization cascade:
 
 Schema: [`scripts/schema.sql`](scripts/schema.sql). Pipeline: [`ledger_one/pull.py`](ledger_one/pull.py).
 
+## Requirements
+
+- **Python 3.11+**
+- **Postgres 14+** (the learn trigger uses `REFERENCING NEW TABLE` which requires PG 14 or later; Neon's free tier runs PG 17)
+- **SimpleFIN Bridge account** (~$15/year)
+- **Anthropic API key** (Haiku categorization costs ~$0.10-0.20/month at typical volume)
+
 ## 5-minute quickstart
 
 1. Install: `pip install -e ".[dev]"`
-2. SimpleFIN Bridge account → claim token → `.env` (see [`references/simplefin_setup.md`](references/simplefin_setup.md)).
+2. Copy `.env.example` to `.env`, then claim the SimpleFIN token. The claim script writes `SIMPLEFIN_ACCESS_URL` into `.env` without printing the raw secret (see [`references/simplefin_setup.md`](references/simplefin_setup.md)).
 3. Neon Postgres → apply `scripts/schema.sql` (see [`references/neon_setup.md`](references/neon_setup.md)).
 4. (Optional) Import Copilot history: `python scripts/import_copilot.py ~/copilot.csv --account-id <id> --before YYYY-MM-DD`.
 5. `cp config/categories.yaml.example config/categories.yaml` and edit.
 6. `python scripts/pull.py --days 90`.
 
 Full walkthrough: [`SKILL.md`](SKILL.md).
+
+Never paste `SIMPLEFIN_ACCESS_URL`, `DATABASE_URL`, or API keys into chat or commit them to git. Put them directly into local env files or your deployment secret store.
 
 ## Extending
 

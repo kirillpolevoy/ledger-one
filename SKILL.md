@@ -16,17 +16,20 @@ Data layer for personal finance: pulls SimpleFIN transactions, categorizes them 
 ## First-time setup (Claude walks through these steps)
 
 1. **SimpleFIN Bridge account + bank link.** See `references/simplefin_setup.md`.
-2. **Claim token.** `python scripts/claim_token.py <base64-token>` → access URL.
-3. **Neon database.** See `references/neon_setup.md`.
-4. **Apply schema.** `psql "$DATABASE_URL" -f scripts/schema.sql` (or paste into Neon SQL editor).
-5. **(Required if coming from Copilot) Import historical data.**
+2. **Create local env file.** Copy `.env.example` → `.env`.
+3. **Claim token.** `python scripts/claim_token.py <base64-token>` writes `SIMPLEFIN_ACCESS_URL` into `.env` without printing the raw secret.
+4. **Neon database.** See `references/neon_setup.md`.
+5. **Apply schema.** `psql "$DATABASE_URL" -f scripts/schema.sql` (or paste into Neon SQL editor).
+6. **(Required if coming from Copilot) Import historical data.**
    - Export CSV from Copilot (`references/copilot_export.md`).
    - Pick a cutover date — the first day ledger-one will own forward. Typically today.
    - `python scripts/import_copilot.py ~/copilot.csv --account-id <id> --before YYYY-MM-DD`
-6. **Configure categories.** Copy `config/categories.yaml.example` → `config/categories.yaml`, edit.
-7. **Env vars.** Copy `.env.example` → `.env`.
-8. **First pull.** `python scripts/pull.py --days 90`
-9. **Cron.** See `references/deploy_cron.md` — GitHub Actions workflow included.
+7. **Configure categories.** Copy `config/categories.yaml.example` → `config/categories.yaml`, edit.
+8. **Fill the rest of `.env`.** Add `DATABASE_URL`, `ANTHROPIC_API_KEY`, and optionally `LEDGER_CATEGORIZATION_MODEL`.
+9. **First pull.** `python scripts/pull.py --days 90`
+10. **Cron.** See `references/deploy_cron.md` — GitHub Actions workflow included.
+
+Never ask the user to paste raw secrets into chat. `SIMPLEFIN_ACCESS_URL`, `DATABASE_URL`, and API keys should go straight into `.env`, `.env.test`, or the deployment secret manager.
 
 ## Ongoing
 - **Add an override:** `python scripts/ledger_cli.py override add "STARBUCKS" "Coffee"`

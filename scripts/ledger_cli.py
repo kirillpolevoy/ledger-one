@@ -8,7 +8,8 @@ from dotenv import load_dotenv
 from ledger_one.normalize import normalize_merchant
 
 
-def add_override(db, raw_pattern: str, category: str) -> int:
+def add_override(db, raw_pattern: str, category: str) -> tuple[str, int]:
+    """Returns (normalized_pattern, rows_updated)."""
     pattern = normalize_merchant(raw_pattern)
     db.execute(
         """
@@ -23,7 +24,7 @@ def add_override(db, raw_pattern: str, category: str) -> int:
             "WHERE merchant_pattern = %s",
             (category, pattern),
         )
-        return cur.rowcount
+        return pattern, cur.rowcount
 
 
 def list_overrides(db) -> list[tuple[str, str]]:
@@ -53,8 +54,23 @@ def main():
 
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True) as conn:
         if args.cmd == "override" and args.subcmd == "add":
-            n = add_override(conn, args.pattern, args.category)
+            pattern, n = add_override(conn, args.pattern, args.category)
+            print(f"Normalized pattern: {pattern!r}")
             print(f"Added override. Retroactively updated {n} transactions.")
+            if n == 0:
+                # Check if there are similar patterns the user might have meant
+                similar = conn.execute(
+                    "SELECT DISTINCT merchant_pattern FROM transactions "
+                    "WHERE merchant_pattern LIKE %s LIMIT 5",
+                    (f"%{pattern.split()[0]}%" if pattern else "",),
+                ).fetchall()
+                if similar:
+                    print("Warning: no existing transactions matched this pattern.")
+                    print("Similar patterns in your data:")
+                    for (s,) in similar:
+                        print(f"  {s!r}")
+                else:
+                    print("Note: no existing transactions matched. Override will apply to future pulls.")
         elif args.cmd == "override" and args.subcmd == "list":
             for p, c in list_overrides(conn):
                 print(f"{p} \u2192 {c}")

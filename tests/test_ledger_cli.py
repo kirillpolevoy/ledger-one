@@ -15,7 +15,8 @@ def _seed(db):
 
 def test_add_normalizes_and_retroactively_updates(db):
     _seed(db)
-    count = add_override(db, "STARBUCKS #9999", "Coffee")
+    pattern, count = add_override(db, "STARBUCKS #9999", "Coffee")
+    assert pattern == "starbucks"
     assert count == 1
     row = db.execute("SELECT category FROM transactions WHERE id='t1'").fetchone()
     assert row == ("Coffee",)

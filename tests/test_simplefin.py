@@ -1,7 +1,13 @@
 import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from ledger_one.simplefin import fetch_accounts_and_transactions, _parse_access_url
+import pytest
+
+from ledger_one.simplefin import (
+    _parse_access_url,
+    _validate_simplefin_url,
+    fetch_accounts_and_transactions,
+)
 
 FIX = Path(__file__).parent / "fixtures" / "simplefin_response.json"
 
@@ -10,6 +16,16 @@ def test_parses_url_credentials():
     base_url, auth = _parse_access_url("https://user:pass@bridge.simplefin.org/simplefin")
     assert base_url == "https://bridge.simplefin.org/simplefin"
     assert auth == ("user", "pass")
+
+
+def test_rejects_non_https_simplefin_url():
+    with pytest.raises(ValueError, match="HTTPS"):
+        _validate_simplefin_url("http://bridge.simplefin.org/simplefin", field_name="SimpleFIN URL")
+
+
+def test_rejects_non_simplefin_host():
+    with pytest.raises(ValueError, match="simplefin.org"):
+        _parse_access_url("https://user:pass@example.com/simplefin")
 
 
 def test_fetches_accounts_and_merges_errors():

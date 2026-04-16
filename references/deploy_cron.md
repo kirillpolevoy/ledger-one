@@ -2,7 +2,7 @@
 
 ## Option 1: GitHub Actions (recommended)
 
-Push this repo to a **private** GitHub repo (the SimpleFIN access URL contains credentials; never make the repo public with secrets). Then:
+The code can live in a public or private repo. Secrets must stay in GitHub Actions secrets, local env files, or your hosting provider's secret store. Then:
 
 1. Add three repo secrets in Settings → Secrets and variables → Actions:
    - `SIMPLEFIN_ACCESS_URL`
@@ -29,5 +29,6 @@ Make sure `.env` is present at the project root so `python-dotenv` picks up the 
 
 ## Caveats
 
+- **Never commit `.env` or `.env.test`.** They are local secret files and should stay out of git.
 - **Secret masking:** GitHub Actions masks secrets that match exact strings. `ledger-one` never prints the access URL, but if you add logging, audit it first.
 - **Flaky days:** banks drop SimpleFIN syncs occasionally. The pull script logs these and continues — no action needed.

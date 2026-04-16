@@ -8,6 +8,10 @@
    ```
    python scripts/claim_token.py <base64-token-here>
    ```
-   This prints a permanent `SIMPLEFIN_ACCESS_URL` — paste it into `.env`.
+   This writes the permanent `SIMPLEFIN_ACCESS_URL` into `.env` without printing the raw secret.
+6. If you need to inspect the value before storing it elsewhere, re-run with:
+   ```
+   python scripts/claim_token.py <base64-token-here> --show-secret
+   ```
 
-**Note:** the access URL contains HTTP Basic auth credentials. Treat it as a secret. `ledger-one` parses the credentials out before making requests and never logs the raw URL.
+**Note:** the access URL contains HTTP Basic auth credentials. Treat it as a secret. `ledger-one` validates that it points to a `simplefin.org` host, parses the credentials out before making requests, and never logs the raw URL.

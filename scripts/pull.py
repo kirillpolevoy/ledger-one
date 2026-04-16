@@ -18,6 +18,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--days", type=int, default=7)
     parser.add_argument("--categories", type=Path, default=Path("config/categories.yaml"))
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Fetch and categorize but do not write to the database.")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -37,6 +39,7 @@ def main():
             db=conn, access_url=access_url, days=args.days,
             categories_file=args.categories,
             anthropic_client=client, model=model,
+            dry_run=args.dry_run,
         )
     # Never log or print access_url, anywhere.
     print("Pull complete:", stats)

@@ -1,11 +1,27 @@
 from datetime import datetime, timedelta, timezone
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import ParseResult, urlparse, urlunparse
 import requests
+
+_SIMPLEFIN_HOST_SUFFIX = ".simplefin.org"
+
+
+def _validate_simplefin_url(url: str, *, field_name: str) -> ParseResult:
+    parsed = urlparse(url)
+    scheme = parsed.scheme.lower()
+    host = (parsed.hostname or "").lower()
+    if scheme != "https":
+        raise ValueError(f"{field_name} must use HTTPS")
+    if not host or (host != "simplefin.org" and not host.endswith(_SIMPLEFIN_HOST_SUFFIX)):
+        raise ValueError(f"{field_name} must point to a simplefin.org host")
+    return parsed
 
 
 def _parse_access_url(access_url: str) -> tuple[str, tuple[str, str] | None]:
-    """Split userinfo out of the URL so credentials don't end up in logs."""
-    parsed = urlparse(access_url)
+    """Split userinfo out of the URL so credentials don't end up in logs.
+
+    Also validates the URL is HTTPS and points to a known SimpleFIN host.
+    """
+    parsed = _validate_simplefin_url(access_url, field_name="SimpleFIN access URL")
     auth: tuple[str, str] | None = None
     if parsed.username or parsed.password:
         auth = (parsed.username or "", parsed.password or "")
