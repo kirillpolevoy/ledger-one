@@ -21,6 +21,7 @@ jobs:
         with: { python-version: "3.11" }
       - run: python -m pip install -r requirements.lock
       - run: python -m pip install --no-deps -e .
+      - run: cp -n config/categories.yaml.example config/categories.yaml
       - run: python scripts/pull.py --days 7
         env:
           SIMPLEFIN_ACCESS_URL: ${{ secrets.SIMPLEFIN_ACCESS_URL }}
