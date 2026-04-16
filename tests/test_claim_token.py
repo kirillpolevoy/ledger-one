@@ -57,7 +57,8 @@ def test_main_writes_env_without_printing_secret(monkeypatch, tmp_path, capsys):
         assert claim_token.main() == 0
 
     out = capsys.readouterr().out
-    assert "Claiming: https://beta-bridge.simplefin.org/claim" in out
+    assert "Claiming token with SimpleFIN..." in out
+    assert claim_url not in out
     assert access_url not in out
     assert "Secret not printed." in out
     assert f"SIMPLEFIN_ACCESS_URL={access_url}" in env_file.read_text()

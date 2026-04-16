@@ -73,16 +73,20 @@ def main():
         print(str(exc), file=sys.stderr)
         return 1
 
-    print(f"Claiming: {_redact(claim_url)}")
+    print("Claiming token with SimpleFIN...")
     try:
         resp = requests.post(claim_url, timeout=60)
         resp.raise_for_status()
-    except requests.HTTPError:
-        if resp.status_code == 403:
+    except requests.HTTPError as exc:
+        status_code = exc.response.status_code if exc.response is not None else None
+        if status_code == 403:
             print("Error: this setup token has already been claimed.", file=sys.stderr)
             print("Generate a new one from the SimpleFIN Bridge dashboard.", file=sys.stderr)
         else:
-            print(f"Error: SimpleFIN returned HTTP {resp.status_code}.", file=sys.stderr)
+            print(f"Error: SimpleFIN returned HTTP {status_code or 'unknown'}.", file=sys.stderr)
+        return 1
+    except requests.RequestException as exc:
+        print(f"Error contacting SimpleFIN: {exc.__class__.__name__}.", file=sys.stderr)
         return 1
     access_url = resp.text.strip()
     _validate_simplefin_url(access_url, field_name="SimpleFIN access URL")
