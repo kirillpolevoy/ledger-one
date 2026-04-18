@@ -45,6 +45,13 @@ def main():
     print("Pull complete:", stats)
     if stats["errors"]:
         print("SimpleFIN reported errors:", stats["errors"])
+    if stats["stale_accounts"]:
+        print(
+            f"Stale balance_date on accounts: {stats['stale_accounts']}. "
+            "SimpleFIN likely serving cached data — check the Bridge UI.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 
