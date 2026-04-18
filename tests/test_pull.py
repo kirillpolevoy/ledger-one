@@ -1,6 +1,8 @@
+import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
-from ledger_one.pull import run_pull
+from ledger_one.pull import run_pull, _warn_on_stale_balances
 
 
 def test_pull_end_to_end_learned_cache_hit(db, tmp_path):
@@ -40,3 +42,17 @@ def test_pull_end_to_end_learned_cache_hit(db, tmp_path):
         "FROM transactions WHERE id='tx1'"
     ).fetchone()
     assert row == ("Coffee", "starbucks", "learned")
+    assert stats["stale_accounts"] == []
+
+
+def test_warn_on_stale_balances_flags_old_accounts(caplog):
+    now = datetime(2026, 4, 18, 18, 0, tzinfo=timezone.utc)
+    accounts = [
+        {"name": "Chase CC", "institution": "Chase", "balance_date": "2026-04-16T13:00:00+00:00"},  # 53h stale
+        {"name": "First Am", "institution": "First American Bank", "balance_date": "2026-04-18T06:00:00+00:00"},  # 12h fresh
+        {"name": "Unknown", "institution": None, "balance_date": None},  # no date — skipped
+    ]
+    with caplog.at_level(logging.WARNING, logger="ledger_one.pull"):
+        stale = _warn_on_stale_balances(accounts, now=now)
+    assert stale == ["Chase CC"]
+    assert any("Chase CC" in r.message and "53.0h" in r.message for r in caplog.records)

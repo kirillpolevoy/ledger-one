@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from ledger_one.normalize import normalize_merchant
 from ledger_one.categorize import categorize_transactions
@@ -7,6 +8,25 @@ from ledger_one.db import upsert_accounts, insert_transactions
 from ledger_one.simplefin import fetch_accounts_and_transactions
 
 log = logging.getLogger(__name__)
+
+STALE_BALANCE_THRESHOLD = timedelta(hours=36)
+
+
+def _warn_on_stale_balances(accounts, now=None):
+    now = now or datetime.now(timezone.utc)
+    stale = []
+    for acct in accounts:
+        bd = acct.get("balance_date")
+        if not bd:
+            continue
+        age = now - datetime.fromisoformat(bd)
+        if age > STALE_BALANCE_THRESHOLD:
+            stale.append(acct["name"])
+            log.warning(
+                "Stale balance for %s (%s): %.1fh old — SimpleFIN may be serving cached data",
+                acct["name"], acct.get("institution") or "?", age.total_seconds() / 3600,
+            )
+    return stale
 
 
 def run_pull(
@@ -23,6 +43,7 @@ def run_pull(
     accounts, raw_txns, errors = simplefin_fetcher(access_url, days)
     for err in errors:
         log.warning("SimpleFIN error: %s", err)
+    stale_accounts = _warn_on_stale_balances(accounts)
 
     for tx in raw_txns:
         tx["merchant_pattern"] = normalize_merchant(tx["description"])
@@ -69,6 +90,7 @@ def run_pull(
         "inserted": inserted,
         "dry_run": dry_run,
         "errors": errors,
+        "stale_accounts": stale_accounts,
     }
     log.info("pull stats: %s", stats)
     return stats
