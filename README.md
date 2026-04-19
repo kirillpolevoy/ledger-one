@@ -1,6 +1,6 @@
 # ledger-one
 
-Pull bank transactions from SimpleFIN into your own Postgres, categorized with Claude. Replaces Mint / Copilot Money for people who want to own their data.
+Pull bank transactions from SimpleFIN into your own Postgres, categorized with Claude. A self-hosted alternative to YNAB, Copilot, Monarch, Rocket Money, Mint, and other personal-finance apps — for people who want to own their data.
 
 - **~$15/year** (SimpleFIN Bridge) + pennies in Claude API calls.
 - **Your database**, your queries, your UI.
