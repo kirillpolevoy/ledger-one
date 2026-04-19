@@ -33,6 +33,16 @@ def test_respects_before_cutoff_for_transactions(db):
     assert stats["transactions_imported"] == 4
 
 
+def test_imported_rows_are_not_pending(db):
+    _seed_account(db)
+    import_csv(db, FIX, account_id="a1", before=CUTOFF)
+    # Copilot CSV is historical posted data — nothing should land as pending
+    pending_count = db.execute(
+        "SELECT count(*) FROM transactions WHERE pending = true"
+    ).fetchone()[0]
+    assert pending_count == 0
+
+
 def test_idempotent(db):
     _seed_account(db)
     import_csv(db, FIX, account_id="a1", before=CUTOFF)
