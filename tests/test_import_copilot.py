@@ -36,11 +36,14 @@ def test_respects_before_cutoff_for_transactions(db):
 def test_imported_rows_are_not_pending(db):
     _seed_account(db)
     import_csv(db, FIX, account_id="a1", before=CUTOFF)
-    # Copilot CSV is historical posted data — nothing should land as pending
-    pending_count = db.execute(
-        "SELECT count(*) FROM transactions WHERE pending = true"
-    ).fetchone()[0]
-    assert pending_count == 0
+    # Copilot CSV is historical posted data. The import explicitly passes
+    # False for the `pending` column — not reliant on the schema DEFAULT.
+    # Assert that every copilot-imported row is posted (pending=false).
+    rows = db.execute(
+        "SELECT pending FROM transactions WHERE categorization_source='copilot_import'"
+    ).fetchall()
+    assert len(rows) > 0  # ensure we actually imported something
+    assert all(r[0] is False for r in rows)
 
 
 def test_idempotent(db):

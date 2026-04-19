@@ -60,9 +60,12 @@ def upsert_transactions(db: psycopg.Connection, txns: list[dict]) -> tuple[int, 
         WHERE transactions.pending = true
         RETURNING (xmax = 0) AS inserted
     """
-    # pull.py only sends rows that are truly new or are pending→posted transitions.
-    # The WHERE guard on the ON CONFLICT clause is defense-in-depth against a
-    # caller bug — in normal operation every input row produces one RETURNING row.
+    # pull.py sends truly-new rows and pending→posted transitions. The WHERE
+    # guard on ON CONFLICT blocks any update against a row that's already
+    # posted — which is load-bearing (not just defensive): it prevents a stale
+    # or concurrent caller from clobbering a finalized row's posted_at/amount.
+    # Guard-blocked rows return an empty RETURNING set and contribute 0 to both
+    # counters; all other input rows produce exactly one RETURNING row.
     inserted = 0
     updated = 0
     with db.cursor() as cur:

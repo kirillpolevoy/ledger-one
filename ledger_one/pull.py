@@ -70,10 +70,9 @@ def _find_duplicate_pending_suspects(db, truly_new):
         (t["account_id"], t["amount"], t["merchant_pattern"])
         for t in truly_new if not t.get("pending")
     ]
-    if not candidates:
-        return 0
     # Single batch query: for each candidate, does a pending row exist within 3d
-    # with matching (account_id, amount, merchant_pattern)?
+    # with matching (account_id, amount, merchant_pattern)? UNNEST of empty
+    # arrays returns zero rows, so we don't need a `if not candidates` guard.
     rows = db.execute(
         """
         SELECT DISTINCT p.id
@@ -120,16 +119,20 @@ def run_pull(
     for tx in raw_txns:
         tx["merchant_pattern"] = normalize_merchant(tx["description"])
 
-    # Lock any rows we might update so a concurrent pull can't double-classify
-    # the same pending→posted transition (trigger would fire twice).
+    # Concurrent pulls are safe without explicit locking:
+    #  - `upsert_transactions` has a WHERE transactions.pending=true guard that
+    #    blocks a second writer from mutating a row already flipped to posted.
+    #  - The learn trigger's `IS DISTINCT FROM` check suppresses merchant_categories
+    #    writes when the category didn't actually change (as on a transition).
+    # So we intentionally don't hold a row lock across the AI-categorization call
+    # that happens between SELECT and UPSERT.
     existing: dict[str, bool] = {}
     if raw_txns:
-        with db.transaction():
-            rows = db.execute(
-                "SELECT id, pending FROM transactions WHERE id = ANY(%s) FOR UPDATE",
-                ([tx["id"] for tx in raw_txns],),
-            ).fetchall()
-            existing = {id_: pending for id_, pending in rows}
+        rows = db.execute(
+            "SELECT id, pending FROM transactions WHERE id = ANY(%s)",
+            ([tx["id"] for tx in raw_txns],),
+        ).fetchall()
+        existing = {id_: pending for id_, pending in rows}
 
     truly_new, transitions, _already_seen = _classify_txns(raw_txns, existing)
 

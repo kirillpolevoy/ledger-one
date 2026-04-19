@@ -84,6 +84,8 @@ def test_parse_pending_uses_transacted_at_and_flags_pending():
         pending=True, transacted_at=1744617600,
     ))
     assert errors == []
+    assert len(accounts) == 1 and accounts[0]["id"] == "ACC-001"
+    assert len(txns) == 1
     assert txns[0]["pending"] is True
     assert txns[0]["has_real_posted"] is False
     assert txns[0]["posted_at"].startswith("2025-04-14")  # transacted_at epoch
@@ -96,9 +98,26 @@ def test_parse_prefers_posted_over_transacted_at():
         pending=True, posted=1744704000, transacted_at=1744617600,
     ))
     assert errors == []
+    assert len(txns) == 1
     assert txns[0]["pending"] is True  # payload still says pending
     assert txns[0]["has_real_posted"] is True  # but has real posted timestamp
     assert txns[0]["posted_at"].startswith("2025-04-15")  # posted, not transacted_at
+
+
+def test_parse_treats_posted_zero_as_not_yet_posted():
+    """SimpleFIN's protocol uses `posted: 0` (not absent) for pending txns.
+    We must treat 0 as 'no real posted timestamp' — otherwise pending rows
+    would be misclassified as transitions and incorrectly flipped to posted=false.
+    """
+    accounts, txns, errors = _fetch(_payload_with_txn(
+        pending=True, posted=0, transacted_at=1744617600,
+    ))
+    assert errors == []
+    assert len(txns) == 1
+    assert txns[0]["pending"] is True
+    assert txns[0]["has_real_posted"] is False  # not True just because posted is present
+    # posted_at falls back to transacted_at (0 is falsy)
+    assert txns[0]["posted_at"].startswith("2025-04-14")
 
 
 def test_parse_skips_and_reports_when_neither_date_present():

@@ -222,18 +222,23 @@ def test_warn_on_stale_balances_flags_old_accounts(caplog):
 
 def test_classify_txns_buckets_correctly():
     existing = {
-        "in-db-pending": True,
+        "in-db-pending-still-pending": True,
+        "in-db-pending-now-posted": True,
         "in-db-posted": False,
     }
     txns = [
+        # Not in existing → truly_new
         {"id": "new-one", "pending": False, "has_real_posted": True},
-        {"id": "in-db-pending", "pending": True, "has_real_posted": False},  # still pending → already_seen
-        {"id": "in-db-pending-now-posted", "pending": False, "has_real_posted": True},  # not in existing → truly_new actually
-        {"id": "in-db-posted", "pending": False, "has_real_posted": True},  # already posted → already_seen
+        # Pending in DB, still pending in payload → already_seen
+        {"id": "in-db-pending-still-pending", "pending": True, "has_real_posted": False},
+        # Pending in DB, now has real posted timestamp → transition
+        {"id": "in-db-pending-now-posted", "pending": False, "has_real_posted": True},
+        # Already posted in DB → already_seen (WHERE guard would block anyway)
+        {"id": "in-db-posted", "pending": False, "has_real_posted": True},
     ]
-    # Fix up: the 3rd one IS in existing as pending
-    existing["in-db-pending-now-posted"] = True
     truly_new, transitions, already_seen = _classify_txns(txns, existing)
     assert [t["id"] for t in truly_new] == ["new-one"]
     assert [t["id"] for t in transitions] == ["in-db-pending-now-posted"]
-    assert [t["id"] for t in already_seen] == ["in-db-pending", "in-db-posted"]
+    assert [t["id"] for t in already_seen] == [
+        "in-db-pending-still-pending", "in-db-posted",
+    ]

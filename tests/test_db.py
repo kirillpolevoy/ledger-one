@@ -101,13 +101,43 @@ def test_upsert_noop_on_already_posted(db):
 
 
 def test_upsert_idempotent_on_pending(db):
-    """Re-upserting the same pending txn is a no-op (same pending state, same values)."""
+    """Re-upserting the same pending txn updates state (row still pending).
+    The row's contents are identical to what was already there, but the UPDATE
+    still fires and `updated` counts it."""
     upsert_accounts(db, [_account()])
     upsert_transactions(db, [_txn(pending=True)])
     inserted, updated = upsert_transactions(db, [_txn(pending=True)])
-    # Second call: UPDATE fires (WHERE allows it since row is pending),
-    # but values are identical. Still counts as 1 updated.
     assert (inserted, updated) == (0, 1)
+    # Behavior assertion (not just counter): row state unchanged.
+    row = db.execute(
+        "SELECT pending, amount, category FROM transactions WHERE id='tx1'"
+    ).fetchone()
+    assert row == (True, -5, "Coffee")
+
+
+def test_upsert_mixed_batch_counts_insert_update_blocked_correctly(db):
+    """Single executemany batch with all three cases: INSERT (xmax=0),
+    UPDATE (xmax≠0, guard allows), GUARDED (no RETURNING row).
+    Verifies the `returning=True` + nextset loop counts them correctly."""
+    upsert_accounts(db, [_account()])
+    # Seed: tx-pending (pending=true), tx-posted (pending=false).
+    upsert_transactions(db, [
+        _txn(id="tx-pending", pending=True, amount="-1.00"),
+        _txn(id="tx-posted", pending=False, amount="-2.00"),
+    ])
+    # Now one batch with: a brand-new row, the pending row transitioning,
+    # and an attempt to mutate the posted row (must be guard-blocked).
+    inserted, updated = upsert_transactions(db, [
+        _txn(id="tx-new", pending=False, amount="-3.00"),                    # INSERT
+        _txn(id="tx-pending", pending=False, amount="-1.25"),                # UPDATE (allowed)
+        _txn(id="tx-posted", pending=True, amount="-99.99"),                 # BLOCKED
+    ])
+    assert (inserted, updated) == (1, 1)
+    # Verify the guarded row was untouched
+    row = db.execute(
+        "SELECT pending, amount FROM transactions WHERE id='tx-posted'"
+    ).fetchone()
+    assert row == (False, -2)
 
 
 def test_learn_trigger_noop_on_transition_when_category_unchanged(db):
