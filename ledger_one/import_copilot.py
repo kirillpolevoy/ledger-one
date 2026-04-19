@@ -38,7 +38,7 @@ def import_csv(db, csv_path: Path, *, account_id: str, before: date) -> dict:
                 tx_id = _deterministic_id(row)
                 tx_rows.append((
                     tx_id, account_id, row["amount"], name, pattern,
-                    category, row["date"],
+                    category, row["date"], False,
                 ))
 
     # Seed merchant_categories (most common category this run wins).
@@ -65,8 +65,9 @@ def import_csv(db, csv_path: Path, *, account_id: str, before: date) -> dict:
                 """
                 INSERT INTO transactions (
                   id, account_id, amount, description, merchant_pattern,
-                  category, posted_at, categorization_source, categorized_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'copilot_import', now())
+                  category, posted_at, categorization_source, categorized_at,
+                  pending
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'copilot_import', now(), %s)
                 ON CONFLICT (id) DO NOTHING
                 """,
                 batch,

@@ -11,6 +11,7 @@ The companion layer:
 - **Reads** freely from any table (`transactions`, `accounts`, `merchant_categories`).
 - **Writes** only to `category_overrides` (via `scripts/ledger_cli.py override add` or direct SQL).
 - **Updates** `transactions.category` when the user manually recategorizes — the DB trigger updates `merchant_categories` automatically.
+- **Filters on `pending`** when reporting "settled" spend. The `transactions.pending` column is `true` for authorized-but-not-posted charges. Amounts can shift (tips, FX) or vanish (auth drops) before posting. Add `AND NOT pending` to any historical/analytical query; omit it only when showing real-time committed spend.
 
 ## Example: companion dashboard repo
 
@@ -26,6 +27,7 @@ def top_merchants_this_month():
             SELECT merchant_pattern, SUM(-amount) AS spent
             FROM transactions
             WHERE posted_at >= date_trunc('month', now()) AND amount < 0
+              AND NOT pending
             GROUP BY merchant_pattern ORDER BY spent DESC LIMIT 10
         """).fetchall()
 
@@ -39,4 +41,4 @@ Install `ledger_one` into the companion project with `pip install -e /path/to/le
 
 ## Schema migrations
 
-v1 has no migration framework. If `ledger-one` ships a v2 schema change, you'll apply it manually via SQL. The companion layer should treat the schema as a stable contract and not depend on columns that aren't in `scripts/schema.sql`.
+Migrations live in `scripts/migrations/YYYY-MM-DD-*.sql`. Apply each manually via `psql "$DATABASE_URL" -f <file>`. There's no migration framework — the files are idempotent (`IF NOT EXISTS` / `IF EXISTS` clauses) and self-documenting. The companion layer should treat `scripts/schema.sql` as the stable contract and not depend on columns not listed there.
