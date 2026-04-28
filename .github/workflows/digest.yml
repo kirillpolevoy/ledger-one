@@ -1,0 +1,28 @@
+name: Weekly digest
+on:
+  schedule:
+    - cron: "0 19 * * 1"  # Mondays 19:00 UTC — one hour after the daily pull, lets posted txns settle.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger digest endpoint
+        env:
+          DIGEST_URL: ${{ secrets.LEDGER_DIGEST_URL }}
+          CRON_SECRET: ${{ secrets.LEDGER_DIGEST_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DIGEST_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::LEDGER_DIGEST_URL and LEDGER_DIGEST_CRON_SECRET must be set as repo secrets."
+            exit 1
+          fi
+          # --fail-with-body so non-2xx exits non-zero AND prints the body for debugging.
+          # --max-time 90 covers cold starts and Anthropic latency without hanging forever.
+          curl --fail-with-body --silent --show-error --max-time 90 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${DIGEST_URL}"
