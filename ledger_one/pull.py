@@ -11,6 +11,12 @@ log = logging.getLogger(__name__)
 
 STALE_BALANCE_THRESHOLD = timedelta(hours=36)
 
+# Reconciliation only trusts "absent from feed" for pendings comfortably inside
+# the refetch window. SimpleFIN filters by transacted_at at DAY precision, so we
+# hold back this many days from the window edge to avoid a day-boundary mismatch
+# false-dropping a still-live pending right at the cutoff.
+RECONCILE_WINDOW_BUFFER_DAYS = 2
+
 
 def _warn_on_stale_balances(accounts, now=None):
     now = now or datetime.now(timezone.utc)
@@ -100,6 +106,49 @@ def _find_duplicate_pending_suspects(db, truly_new):
     return len(rows)
 
 
+def _reconcile_absent_pendings(db, feed_ids, window_start, *, dry_run):
+    """Drop pending rows SimpleFIN no longer reports within the refetch window.
+
+    A pending that's gone from the feed has either settled under a new id (the
+    real posted row is already in the ledger, inserted as a truly-new row) or
+    had its hold released — either way the stranded pending is dead. This is the
+    deterministic equivalent of Plaid's `removed` event: SimpleFIN gives us no
+    pending→posted link, so "present last pull, absent this pull" is the signal.
+
+    Only rows with posted_at >= window_start are eligible: outside that window
+    SimpleFIN wasn't queried for them, so absence is uninformative. A false drop
+    from a transient feed gap is self-healing — the next pull sees the id is
+    gone from the DB and re-inserts it as new.
+
+    Returns the dropped (id, description) rows for the audit log. In dry_run it
+    SELECTs the would-drop set without deleting.
+    """
+    feed_ids = list(feed_ids)
+    with db.cursor() as cur:
+        if dry_run:
+            cur.execute(
+                """
+                SELECT id, description, amount, posted_at FROM transactions
+                WHERE pending = true
+                  AND posted_at >= %s
+                  AND NOT (id = ANY(%s))
+                """,
+                (window_start, feed_ids),
+            )
+        else:
+            cur.execute(
+                """
+                DELETE FROM transactions
+                WHERE pending = true
+                  AND posted_at >= %s
+                  AND NOT (id = ANY(%s))
+                RETURNING id, description, amount, posted_at
+                """,
+                (window_start, feed_ids),
+            )
+        return cur.fetchall()
+
+
 def run_pull(
     *,
     db,
@@ -164,6 +213,16 @@ def run_pull(
 
     to_write = truly_new + transitions
 
+    # Reconciliation: drop pendings SimpleFIN stopped reporting within the
+    # refetch window. Skipped on an empty feed (likely an outage) or when
+    # SimpleFIN returned errors (a partial feed would make a live account's
+    # pendings look falsely absent) — never delete on incomplete data.
+    feed_ids = [tx["id"] for tx in raw_txns]
+    reconcile_window_start = datetime.now(timezone.utc) - timedelta(
+        days=max(days - RECONCILE_WINDOW_BUFFER_DAYS, 0)
+    )
+    reconcile_enabled = bool(feed_ids) and not errors
+
     if dry_run:
         log.info("Dry run — skipping database writes.")
         for tx in to_write:
@@ -175,11 +234,35 @@ def run_pull(
             )
         inserted, updated = 0, 0
         duplicate_pending_suspects = _find_duplicate_pending_suspects(db, truly_new)
+        dropped = (
+            _reconcile_absent_pendings(db, feed_ids, reconcile_window_start, dry_run=True)
+            if reconcile_enabled else []
+        )
     else:
         with db.transaction():
             upsert_accounts(db, accounts)
             inserted, updated = upsert_transactions(db, to_write)
             duplicate_pending_suspects = _find_duplicate_pending_suspects(db, truly_new)
+            dropped = (
+                _reconcile_absent_pendings(db, feed_ids, reconcile_window_start, dry_run=False)
+                if reconcile_enabled else []
+            )
+
+    if not reconcile_enabled:
+        log.info(
+            "Pending reconciliation skipped (%s).",
+            "empty feed" if not feed_ids else "SimpleFIN errors present",
+        )
+    elif dropped:
+        log.info(
+            "%s %d stale pending row(s) absent from feed:",
+            "Would drop" if dry_run else "Dropped", len(dropped),
+        )
+        for tx_id, desc, amount, posted_at in dropped:
+            log.info(
+                "  - %s | %s | %s | %s",
+                str(posted_at)[:10], (desc or "")[:40], amount, tx_id,
+            )
 
     stats = {
         "accounts": len(accounts),
@@ -188,6 +271,7 @@ def run_pull(
         "posted_inserts": sum(1 for t in truly_new if not t.get("pending")),
         "pending_to_posted_transitions": len(transitions),
         "duplicate_pending_suspects": duplicate_pending_suspects,
+        "pendings_dropped": len(dropped),
         "override_matches": sum(1 for _, s in results.values() if s == "override"),
         "learned_matches": sum(1 for _, s in results.values() if s == "learned"),
         "ai_calls": sum(1 for _, s in results.values() if s == "ai"),
