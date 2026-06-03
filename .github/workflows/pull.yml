@@ -22,7 +22,11 @@ jobs:
       - run: python -m pip install -r requirements.lock
       - run: python -m pip install --no-deps -e .
       - run: cp -n config/categories.yaml.example config/categories.yaml
-      - run: python scripts/pull.py --days 7
+      # 32-day window: wide enough that every still-live pending (incl. ~31-day
+      # hotel/rental holds) is re-fetched each run, so the pull's pending
+      # reconciliation can trust "absent from feed" = settled/released. Pulling
+      # more days is near-free — only genuinely new transactions get categorized.
+      - run: python scripts/pull.py --days 32
         env:
           SIMPLEFIN_ACCESS_URL: ${{ secrets.SIMPLEFIN_ACCESS_URL }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
