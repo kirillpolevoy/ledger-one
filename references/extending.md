@@ -12,6 +12,7 @@ The companion layer:
 - **Writes** only to `category_overrides` (via `scripts/ledger_cli.py override add` or direct SQL).
 - **Updates** `transactions.category` when the user manually recategorizes — the DB trigger updates `merchant_categories` automatically.
 - **Filters on `pending`** when reporting "settled" spend. The `transactions.pending` column is `true` for authorized-but-not-posted charges. Amounts can shift (tips, FX) or vanish (auth drops) before posting. Add `AND NOT pending` to any historical/analytical query; omit it only when showing real-time committed spend.
+- **Expects deletes.** `transactions` rows are not immutable: the pull hard-DELETEs pending rows the bank stops reporting (feed-absence reconciliation — they settled under a new id or the hold was released). Don't cache `transactions.id` for pending rows or foreign-key to `transactions` from companion tables without handling disappearance; re-query rather than assuming a previously-seen pending still exists.
 
 ## Example: companion dashboard repo
 
