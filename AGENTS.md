@@ -14,7 +14,7 @@ Data layer for personal finance: pulls SimpleFIN transactions (pending and poste
 
 - Install: `pip install -e ".[dev]"`
 - Tests: `pytest`
-- Pull: `python scripts/pull.py --days 32` (add `--dry-run` to preview writes and would-drop pendings). Scheduled runs must use `--days 32` — the reconciliation window depends on it; see [references/deploy_cron.md](references/deploy_cron.md).
+- Pull: `python scripts/pull.py` (defaults to `--days 32`; add `--dry-run` to preview writes and would-drop pendings). Don't narrow the window — pending reconciliation depends on it; see [references/deploy_cron.md](references/deploy_cron.md).
 - Add an override: `python scripts/ledger_cli.py override add "STARBUCKS" "Coffee"`
 
 ## Monitoring
