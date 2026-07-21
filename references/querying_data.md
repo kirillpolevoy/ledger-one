@@ -4,7 +4,7 @@ All queries run against your Postgres database directly (`psql "$DATABASE_URL"` 
 
 **Amount sign convention:** negative = debit (money out), positive = credit (money in).
 
-**Pending vs posted:** the `transactions.pending` column (BOOLEAN) distinguishes pending charges (visible in the bank app within minutes of swipe) from posted charges (finalized by the bank, 1–3 business days later). Most reporting queries below add `AND NOT pending` so they reflect settled activity only — pending amounts can shift (tips, FX conversion) or vanish (auth drops). When you want real-time committed spend, drop the `AND NOT pending` filter.
+**Pending vs posted:** the `transactions.pending` column (BOOLEAN) distinguishes pending charges (visible in the bank app within minutes of swipe) from posted charges (finalized by the bank, 1–3 business days later). Most reporting queries below add `AND NOT pending` so they reflect settled activity only — pending amounts can shift (tips, FX conversion) or the row can vanish entirely: the pull deletes pendings the bank stops reporting (feed-absence reconciliation), because they either settled under a new id or the hold was released. A disappeared pending is expected behavior, not data loss. When you want real-time committed spend, drop the `AND NOT pending` filter.
 
 ## Pending quick views
 
@@ -14,8 +14,11 @@ SELECT posted_at::date AS swipe_date, description, -amount AS amount
 FROM transactions WHERE pending
 ORDER BY posted_at DESC;
 
--- Stuck pendings (auth dropped, never posted): worth investigating
-SELECT posted_at::date, description, -amount AS amount
+-- Old pendings the bank still reports (long holds — hotels, rentals).
+-- Genuinely stuck pendings get auto-deleted by the pull's feed-absence
+-- reconciliation, so rows here are either still-live holds (fine) or
+-- older than the 32-day refetch window (only those warrant a look).
+SELECT posted_at::date AS swipe_date, description, -amount AS amount
 FROM transactions
 WHERE pending AND posted_at < now() - interval '14 days'
 ORDER BY posted_at;

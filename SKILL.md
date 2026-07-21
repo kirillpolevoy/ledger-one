@@ -28,14 +28,16 @@ Data layer for personal finance: pulls SimpleFIN transactions (pending and poste
 7. **Configure categories.** Copy `config/categories.yaml.example` → `config/categories.yaml`, edit.
 8. **Fill the rest of `.env`.** Add `DATABASE_URL`, `ANTHROPIC_API_KEY`, and optionally `LEDGER_CATEGORIZATION_MODEL`.
 9. **First pull.** `python scripts/pull.py --days 90`
-10. **Cron.** See `references/deploy_cron.md` — GitHub Actions workflow included.
+10. **Cron.** See `references/deploy_cron.md` — two GitHub Actions workflows included: the daily pull (required) and a weekly digest trigger (optional — it curls a digest endpoint in the user's companion layer and needs `LEDGER_DIGEST_URL` + `LEDGER_DIGEST_CRON_SECRET` repo secrets; without a companion digest, disable or delete `digest.yml`).
 
 Never ask the user to paste raw secrets into chat. `SIMPLEFIN_ACCESS_URL`, `DATABASE_URL`, and API keys should go straight into `.env`, `.env.test`, or the deployment secret manager.
 
 ## Ongoing
 - **Add an override:** `python scripts/ledger_cli.py override add "STARBUCKS" "Coffee"`
 - **Recategorize a transaction:** just `UPDATE transactions SET category = '...'`. The DB trigger updates the learned mapping automatically.
-- **Pending vs posted:** each row has a `pending BOOLEAN`. Pending charges appear the moment they're swiped; the same row flips to `pending=false` when the bank finalizes (user-set category preserved). Add `AND NOT pending` to queries that should only reflect settled spend.
+- **Pending vs posted:** each row has a `pending BOOLEAN`. Pending charges appear the moment they're swiped; when the bank reuses the id at settlement, the same row flips to `pending=false` (user-set category preserved). Add `AND NOT pending` to queries that should only reflect settled spend.
+- **Vanished pendings are expected, not data loss:** when the bank posts under a *new* id (or releases the hold), the pull deletes the stranded pending once it's absent from the SimpleFIN feed (feed-absence reconciliation). The posted charge, if any, is already in the ledger under its own id. Dropped rows are logged per pull and counted in the `pendings_dropped` stat.
+- **Weekly digest:** `.github/workflows/digest.yml` curls the companion-layer digest endpoint Mondays 19:00 UTC. Manual runs from the Actions tab support a `dry_run` input (no email, no `digest_runs` row).
 - **Query data:** `references/querying_data.md`.
 
 ## Extending
