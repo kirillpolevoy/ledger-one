@@ -32,3 +32,17 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           LEDGER_CATEGORIZATION_MODEL: claude-haiku-4-5-20251001
+
+  keepalive:
+    # GitHub auto-disables scheduled workflows on public repos after 60 days
+    # without repo activity — silently, apart from an email. Hitting the enable
+    # endpoint resets this workflow's timer. Only ever re-enables itself, so a
+    # workflow disabled by hand stays disabled (it never runs to get here).
+    # Separate job so actions:write never sits next to the pull job's secrets.
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - run: gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/pull.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}
