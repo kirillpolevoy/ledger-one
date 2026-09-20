@@ -39,3 +39,14 @@ jobs:
           curl --fail-with-body --silent --show-error --max-time 90 \
             -H "Authorization: Bearer ${CRON_SECRET}" \
             "${URL}"
+
+  keepalive:
+    # Resets GitHub's 60-day inactivity auto-disable for this workflow — see
+    # the matching job in pull.yml. Only ever re-enables itself.
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - run: gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/digest.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}
