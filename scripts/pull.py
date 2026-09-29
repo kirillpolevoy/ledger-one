@@ -16,7 +16,9 @@ from ledger_one.pull import run_pull
 def main():
     load_dotenv()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--days", type=int, default=7)
+    # 32 matches the cron: pending reconciliation only trusts "absent from
+    # feed" when every still-live pending (~31-day holds) is re-fetched.
+    parser.add_argument("--days", type=int, default=32)
     parser.add_argument("--categories", type=Path, default=Path("config/categories.yaml"))
     parser.add_argument("--dry-run", action="store_true",
                         help="Fetch and categorize but do not write to the database.")

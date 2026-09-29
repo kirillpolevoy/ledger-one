@@ -29,11 +29,11 @@ Make sure `.env` is present at the project root so `python-dotenv` picks up the 
 
 ## Pull window: why `--days 32`
 
-The pull reconciles pending rows by feed absence: a pending inside the refetch window that SimpleFIN no longer reports gets deleted (it settled under a new id, or the hold was released). That's only sound if every still-live pending is re-fetched on every run — 32 days covers ~31-day hotel/rental holds, and a 2-day buffer at the window edge protects against SimpleFIN's day-precision date filter. Pulling more days is near-free: only genuinely new transactions get categorized. If you narrow the window, pendings older than `days - 2` silently stop being reconciled. (The CLI default is `--days 7` for quick manual runs; scheduled runs should always pass `--days 32`.)
+The pull reconciles pending rows by feed absence: a pending inside the refetch window that SimpleFIN no longer reports gets deleted (it settled under a new id, or the hold was released). That's only sound if every still-live pending is re-fetched on every run — 32 days covers ~31-day hotel/rental holds, and a 2-day buffer at the window edge protects against SimpleFIN's day-precision date filter. Pulling more days is near-free: only genuinely new transactions get categorized. If you narrow the window, pendings older than `days - 2` silently stop being reconciled. (`--days 32` is also the CLI default, so bare manual runs reconcile the same way as the cron.)
 
 ## Picking a cron time
 
-SimpleFIN syncs each linked bank on its own ~24h cadence. If your cron fires *before* SimpleFIN's daily refresh for a given bank, that day's new transactions land in the pull the *next* day — one-day lag, indefinitely. Pick a UTC hour that falls after the latest-refreshing bank (observe the `balance-date` on the payload; see `project_simplefin_silent_staleness` memory for the rationale).
+SimpleFIN syncs each linked bank on its own ~24h cadence. If your cron fires *before* SimpleFIN's daily refresh for a given bank, that day's new transactions land in the pull the *next* day — one-day lag, indefinitely. Pick a UTC hour that falls after the latest-refreshing bank — watch the `balance-date` each account reports over a few days to learn its refresh time.
 
 For US East Chase, SimpleFIN refresh has been observed around 13:00 UTC; 18:00 UTC gives a ~5h buffer for jitter. If you add a bank later that refreshes later in the day, shift the cron.
 

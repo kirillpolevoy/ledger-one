@@ -15,7 +15,7 @@ Data layer for personal finance: pulls SimpleFIN transactions (pending and poste
 
 - Install: `pip install -e ".[dev]"`
 - Tests: `pytest`
-- Pull: `python scripts/pull.py --days 32` (add `--dry-run` to preview writes and would-drop pendings). Scheduled runs must use `--days 32` — the reconciliation window depends on it; see [references/deploy_cron.md](references/deploy_cron.md).
+- Pull: `python scripts/pull.py` (defaults to `--days 32`; add `--dry-run` to preview writes and would-drop pendings). Don't narrow the window — pending reconciliation depends on it; see [references/deploy_cron.md](references/deploy_cron.md).
 - Add an override: `python scripts/ledger_cli.py override add "STARBUCKS" "Coffee"`
 - Add an always-business override: `python scripts/ledger_cli.py override add "DAYTON EXPRESS" "Travel" --business` (tags past and future charges from the merchant; never untags)
 - Retire a legacy `Business Expense` category, in order: apply `scripts/migrations/2026-09-28-add-business.sql`; deploy the new pull code to main; remove the category from `config/categories.yaml`; `python scripts/migrate_business_expense.py` (dry run — writes `business_migration_plan.json`); review/edit the plan; `python scripts/migrate_business_expense.py --apply --plan business_migration_plan.json` (commits exactly the plan, no AI calls). Safe to re-run: it re-tags rows an older pull filed as personal. See [references/deploy_cron.md](references/deploy_cron.md).
