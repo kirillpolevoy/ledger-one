@@ -21,7 +21,20 @@ jobs:
         with: { python-version: "3.11" }
       - run: python -m pip install -r requirements.lock
       - run: python -m pip install --no-deps -e .
-      - run: cp -n config/categories.yaml.example config/categories.yaml
+      # Your category list, not the example — config/categories.yaml is gitignored,
+      # so CI only has it via this secret. Fails loudly when unset: a silent
+      # fallback to the example had the AI categorizing against the wrong list.
+      # A secret (not a variable) so the list stays masked in public run logs.
+      - name: Write config/categories.yaml from CATEGORIES_YAML secret
+        env:
+          CATEGORIES_YAML: ${{ secrets.CATEGORIES_YAML }}
+        run: |
+          if [ -z "$CATEGORIES_YAML" ]; then
+            echo "::error::CATEGORIES_YAML secret is not set. From your checkout: gh secret set CATEGORIES_YAML < config/categories.yaml"
+            exit 1
+          fi
+          printf '%s\n' "$CATEGORIES_YAML" > config/categories.yaml
+          python -c "from ledger_one.config import load_categories as l; print(len(l('config/categories.yaml')), 'categories loaded')"
       # 32-day window: wide enough that every still-live pending (incl. ~31-day
       # hotel/rental holds) is re-fetched each run, so the pull's pending
       # reconciliation can trust "absent from feed" = settled/released. Pulling

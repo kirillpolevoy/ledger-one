@@ -28,7 +28,7 @@ Data layer for personal finance: pulls SimpleFIN transactions (pending and poste
 7. **Configure categories.** Copy `config/categories.yaml.example` → `config/categories.yaml`, edit.
 8. **Fill the rest of `.env`.** Add `DATABASE_URL`, `ANTHROPIC_API_KEY`, and optionally `LEDGER_CATEGORIZATION_MODEL`.
 9. **First pull.** `python scripts/pull.py --days 90`
-10. **Cron.** See `references/deploy_cron.md` — two GitHub Actions workflows included: the daily pull (required) and a weekly digest trigger (optional — it curls a digest endpoint in the user's companion layer and needs `LEDGER_DIGEST_URL` + `LEDGER_DIGEST_CRON_SECRET` repo secrets; without a companion digest, disable or delete `digest.yml`).
+10. **Cron.** See `references/deploy_cron.md` — two GitHub Actions workflows included: the daily pull (required; needs a `CATEGORIES_YAML` repo secret set from the step-7 file via `gh secret set CATEGORIES_YAML < config/categories.yaml`) and a weekly digest trigger (optional — it curls a digest endpoint in the user's companion layer and needs `LEDGER_DIGEST_URL` + `LEDGER_DIGEST_CRON_SECRET` repo secrets; without a companion digest, disable or delete `digest.yml`).
 
 Never ask the user to paste raw secrets into chat. `SIMPLEFIN_ACCESS_URL`, `DATABASE_URL`, and API keys should go straight into `.env`, `.env.test`, or the deployment secret manager.
 

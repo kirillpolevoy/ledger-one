@@ -8,15 +8,16 @@ The code can live in a public or private repo. Secrets must stay in GitHub Actio
    - `SIMPLEFIN_ACCESS_URL`
    - `DATABASE_URL`
    - `ANTHROPIC_API_KEY`
-2. The workflow at `.github/workflows/pull.yml` runs daily at 18:00 UTC. Adjust the cron expression as desired, but fire it *after* your bank's daily SimpleFIN refresh (see "Picking a cron time" below).
-3. Trigger a manual run from the Actions tab to verify.
+2. Add a fourth secret, `CATEGORIES_YAML`, holding your category list: `gh secret set CATEGORIES_YAML < config/categories.yaml`. `config/categories.yaml` is gitignored, so this is the only way CI sees your list; the run fails if it's unset. Re-run the command whenever you edit the local file — the secret is write-only, so nothing flags drift.
+3. The workflow at `.github/workflows/pull.yml` runs daily at 18:00 UTC. Adjust the cron expression as desired, but fire it *after* your bank's daily SimpleFIN refresh (see "Picking a cron time" below).
+4. Trigger a manual run from the Actions tab to verify. The categories step logs `N categories loaded` — it should match your local list (plus `Uncategorized`).
 
 SimpleFIN enforces a limit of ~24 API calls per day per access token. Once daily is well under that.
 
 ## Option 2: Railway
 
 1. Create a Railway project from this repo.
-2. Add the three secrets as environment variables.
+2. Add the three secrets as environment variables, and make sure `config/categories.yaml` exists in the deployed checkout (it's gitignored).
 3. Enable the "Cron" feature and set the schedule to `0 18 * * *` running `python scripts/pull.py --days 32` (see "Pull window" below — do not narrow this).
 
 ## Option 3: Local crontab
