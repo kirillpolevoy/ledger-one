@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 import anthropic as anthropic_pkg
-from ledger_one.categorize import categorize_transactions
+from ledger_one.categorize import categorize_transactions, fetch_business_patterns
 
 
 def _mock_tool_response(anthropic, classifications: dict):
@@ -85,3 +85,65 @@ def test_ai_invalid_category_becomes_uncategorized(db):
         model="claude-haiku-4-5-20251001",
     )
     assert results["t1"] == ("Uncategorized", "ai")
+
+
+def test_exclude_categories_skips_override_and_uses_learned(db):
+    db.execute("INSERT INTO category_overrides (merchant_pattern, category) "
+               "VALUES ('dayton express', 'Business Expense')")
+    db.execute("INSERT INTO merchant_categories (merchant_pattern, category) "
+               "VALUES ('dayton express', 'Travel')")
+    anthropic = MagicMock()
+    results = categorize_transactions(
+        db,
+        [{"id": "t1", "merchant_pattern": "dayton express", "description": "DAYTON EXPRESS"}],
+        categories=["Travel", "Restaurants"],
+        anthropic_client=anthropic,
+        model="claude-haiku-4-5-20251001",
+        exclude_categories={"Business Expense"},
+    )
+    assert results["t1"] == ("Travel", "learned")
+    anthropic.messages.create.assert_not_called()
+
+
+def test_exclude_categories_skips_override_and_learned_falls_to_ai(db):
+    db.execute("INSERT INTO category_overrides (merchant_pattern, category) "
+               "VALUES ('dayton express', 'Business Expense')")
+    db.execute("INSERT INTO merchant_categories (merchant_pattern, category) "
+               "VALUES ('dayton express', 'Business Expense')")
+    anthropic = MagicMock()
+    _mock_tool_response(anthropic, {"t1": "Travel"})
+    results = categorize_transactions(
+        db,
+        [{"id": "t1", "merchant_pattern": "dayton express", "description": "DAYTON EXPRESS"}],
+        categories=["Travel", "Restaurants"],
+        anthropic_client=anthropic,
+        model="claude-haiku-4-5-20251001",
+        exclude_categories={"Business Expense"},
+    )
+    assert results["t1"] == ("Travel", "ai")
+    anthropic.messages.create.assert_called_once()
+
+
+def test_exclude_categories_default_keeps_override(db):
+    db.execute("INSERT INTO category_overrides (merchant_pattern, category) "
+               "VALUES ('dayton express', 'Business Expense')")
+    anthropic = MagicMock()
+    results = categorize_transactions(
+        db,
+        [{"id": "t1", "merchant_pattern": "dayton express", "description": "DAYTON EXPRESS"}],
+        categories=["Travel"],
+        anthropic_client=anthropic,
+        model="claude-haiku-4-5-20251001",
+    )
+    assert results["t1"] == ("Business Expense", "override")
+
+
+def test_fetch_business_patterns(db):
+    db.execute("INSERT INTO category_overrides (merchant_pattern, category, business) VALUES "
+               "('dayton express', 'Travel', true), "
+               "('courtyard dayton', 'Travel', true), "
+               "('starbucks', 'Coffee', false)")
+    assert fetch_business_patterns(
+        db, ["dayton express", "starbucks", "unknown merchant"]
+    ) == {"dayton express"}
+    assert fetch_business_patterns(db, []) == set()

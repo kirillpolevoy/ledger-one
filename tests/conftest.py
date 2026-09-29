@@ -73,3 +73,9 @@ def db():
             f"Failed to connect to TEST_DATABASE_URL ({_redact_db_url(url)}). "
             "Check network access and database availability."
         ) from None
+
+
+@pytest.fixture
+def db_url(db):
+    """URL of the freshly reset test DB, for code that opens its own connection."""
+    return _test_db_url()

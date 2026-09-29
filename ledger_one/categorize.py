@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Collection, Iterable
 from typing import Literal
 import anthropic as anthropic_pkg
 
@@ -39,11 +40,18 @@ def categorize_transactions(
     categories: list[str],
     anthropic_client,
     model: str,
+    exclude_categories: Collection[str] = (),
 ) -> dict[str, tuple[str, Source]]:
-    """Return {transaction_id: (category, source)}."""
+    """Return {transaction_id: (category, source)}.
+
+    Overrides and learned mappings whose category is in `exclude_categories`
+    are ignored, so those merchants fall through to the next tier (and to AI
+    when both are excluded). Used to re-derive categories for rows filed under
+    a retired category; keep excluded names out of `categories` too.
+    """
     patterns = list({t["merchant_pattern"] for t in transactions if t.get("merchant_pattern")})
-    overrides = _fetch_overrides(db, patterns)
-    learned = _fetch_learned(db, patterns)
+    overrides = _drop_excluded(_fetch_overrides(db, patterns), exclude_categories)
+    learned = _drop_excluded(_fetch_learned(db, patterns), exclude_categories)
 
     results: dict[str, tuple[str, Source]] = {}
     need_ai: list[dict] = []
@@ -62,6 +70,28 @@ def categorize_transactions(
         results.update(_classify_batch(batch, categories, anthropic_client, model))
 
     return results
+
+
+def fetch_business_patterns(db, patterns: Iterable[str]) -> set[str]:
+    """Return the subset of `patterns` whose override has business = true.
+
+    Only overrides carry business — learned mappings and AI never set it.
+    """
+    patterns = [p for p in set(patterns) if p]
+    if not patterns:
+        return set()
+    rows = db.execute(
+        "SELECT merchant_pattern FROM category_overrides "
+        "WHERE business AND merchant_pattern = ANY(%s)",
+        (patterns,),
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
+def _drop_excluded(mapping: dict[str, str], exclude: Collection[str]) -> dict[str, str]:
+    if not exclude:
+        return mapping
+    return {p: c for p, c in mapping.items() if c not in exclude}
 
 
 def _fetch_overrides(db, patterns: list[str]) -> dict[str, str]:

@@ -1,3 +1,5 @@
+import psycopg
+import pytest
 from ledger_one.db import upsert_accounts, upsert_transactions
 
 
@@ -15,7 +17,7 @@ def _txn(**overrides):
         "description": "STARBUCKS", "merchant_pattern": "starbucks",
         "category": "Coffee", "source": "ai",
         "posted_at": "2026-04-14T12:00:00+00:00", "raw_payload": {},
-        "pending": False,
+        "pending": False, "business": False,
     }
     base.update(overrides)
     return base
@@ -167,3 +169,55 @@ def test_learn_trigger_noop_on_transition_when_category_unchanged(db):
     ).fetchone()[0]
     # No new row seeded (trigger guard)
     assert after == before
+
+
+def test_schema_business_defaults_false(db):
+    """Rows written without `business` (older callers, Copilot import, direct
+    SQL) default to personal, on both transactions and overrides."""
+    upsert_accounts(db, [_account()])
+    db.execute(
+        "INSERT INTO transactions (id, account_id, amount, posted_at) "
+        "VALUES ('t1', 'a1', -5, now())"
+    )
+    db.execute(
+        "INSERT INTO category_overrides (merchant_pattern, category) "
+        "VALUES ('uber trip', 'Transportation')"
+    )
+    assert db.execute("SELECT business FROM transactions WHERE id='t1'").fetchone() == (False,)
+    assert db.execute(
+        "SELECT business FROM category_overrides WHERE merchant_pattern='uber trip'"
+    ).fetchone() == (False,)
+    with pytest.raises(psycopg.errors.NotNullViolation):
+        db.execute("UPDATE transactions SET business = NULL WHERE id='t1'")
+
+
+def test_schema_business_partial_index(db):
+    row = db.execute(
+        "SELECT indexdef FROM pg_indexes WHERE indexname = 'idx_transactions_business'"
+    ).fetchone()
+    assert row is not None
+    assert "WHERE business" in row[0]
+
+
+def test_upsert_transactions_inserts_business_flag(db):
+    upsert_accounts(db, [_account()])
+    upsert_transactions(db, [_txn(id="biz", business=True), _txn(id="personal")])
+    rows = dict(db.execute("SELECT id, business FROM transactions").fetchall())
+    assert rows == {"biz": True, "personal": False}
+
+
+def test_upsert_transition_preserves_business(db):
+    """Transitions carry a placeholder business=False; the UPDATE SET list omits
+    business, so a tag set while pending (override retro-tag) survives posting."""
+    upsert_accounts(db, [_account()])
+    upsert_transactions(db, [_txn(id="from-override", pending=True, business=True)])
+    upsert_transactions(db, [_txn(id="tagged-later", pending=True)])
+    db.execute("UPDATE transactions SET business = true WHERE id = 'tagged-later'")
+
+    inserted, updated = upsert_transactions(db, [
+        _txn(id="from-override", pending=False, category=None, source=None, business=False),
+        _txn(id="tagged-later", pending=False, category=None, source=None, business=False),
+    ])
+    assert (inserted, updated) == (0, 2)
+    rows = dict(db.execute("SELECT id, business FROM transactions").fetchall())
+    assert rows == {"from-override": True, "tagged-later": True}

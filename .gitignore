@@ -12,3 +12,6 @@ dist/
 config/categories.yaml
 # Internal planning scratchpad; public docs live in references/.
 docs/
+
+# business-flag migration plan (holds transaction descriptions)
+business_migration_plan.json

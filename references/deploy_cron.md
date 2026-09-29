@@ -62,6 +62,19 @@ Setup:
 
 Not running a digest? Delete `digest.yml` or disable the workflow in the Actions tab — with the secrets unset it fails loudly (red run) rather than silently skipping.
 
+## Upgrading to the `business` flag
+
+`Business Expense` used to be a category; it's now a flag (`transactions.business`, `category_overrides.business`). To convert an existing ledger, in this order:
+
+1. Apply `scripts/migrations/2026-09-28-add-business.sql`.
+2. Deploy the new pull code: merge to main, since the scheduled pull runs from main. A pull from older code files charges from a converted "always business" override with `business = false`.
+3. Remove `Business Expense` from `config/categories.yaml`.
+4. `python scripts/migrate_business_expense.py` — a dry run. It prints the report, rolls back, and writes `business_migration_plan.json`: each row's and override's new category.
+5. Review the plan. Fix any category the AI got wrong. The file holds transaction descriptions, so keep it out of git.
+6. `python scripts/migrate_business_expense.py --apply --plan business_migration_plan.json` — commits exactly the plan, with no AI calls. It aborts with nothing written if the `Business Expense` rows or overrides changed since step 4 (re-run the dry run), if a category isn't in the categories file, or if anything is `Uncategorized` (rows may be, with `--allow-uncategorized`; overrides never).
+
+Run it outside the 18:00 UTC pull window. It's safe to re-run: every run tags rows whose merchant has a business override, so it repairs charges an older pull filed as personal. It also keeps each migrated merchant's learned mapping sane: a real category from before is restored, otherwise the merchant gets the most common real category among its migrated rows, or no mapping (never `Uncategorized`).
+
 ## Caveats
 
 - **Never commit `.env` or `.env.test`.** They are local secret files and should stay out of git.

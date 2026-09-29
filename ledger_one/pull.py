@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from ledger_one.normalize import normalize_merchant
-from ledger_one.categorize import categorize_transactions
+from ledger_one.categorize import categorize_transactions, fetch_business_patterns
 from ledger_one.config import load_categories
 from ledger_one.db import upsert_accounts, upsert_transactions
 from ledger_one.simplefin import fetch_accounts_and_transactions
@@ -194,21 +194,28 @@ def run_pull(
         anthropic_client=anthropic_client,
         model=model,
     )
+    # business comes only from an override with business = true — never from
+    # learned mappings or AI.
+    business_patterns = fetch_business_patterns(
+        db, (tx["merchant_pattern"] for tx in truly_new)
+    )
     for tx in truly_new:
         cat, source = results[tx["id"]]
         tx["category"] = cat
         tx["source"] = source
+        tx["business"] = tx["merchant_pattern"] in business_patterns
 
-    # Transitions don't carry category/source — db.py reads them from EXCLUDED
-    # but the UPDATE SET list omits category/categorization_source/categorized_at
-    # so the stored values are preserved. We still need placeholder keys for the
-    # tuple-building step in upsert_transactions.
+    # Transitions don't carry category/source/business — db.py reads them from
+    # EXCLUDED but the UPDATE SET list omits category/categorization_source/
+    # categorized_at/business so the stored values are preserved. We still need
+    # placeholder keys for the tuple-building step in upsert_transactions.
     # Also force `pending = False`: the transition means the txn has really
     # posted, even if SimpleFIN's payload still has `pending: true` during the
     # flip moment. has_real_posted is authoritative here.
     for tx in transitions:
         tx.setdefault("category", None)
         tx.setdefault("source", None)
+        tx.setdefault("business", False)
         tx["pending"] = False
 
     to_write = truly_new + transitions
@@ -228,9 +235,10 @@ def run_pull(
         for tx in to_write:
             tag = "PENDING" if tx.get("pending") else "POSTED "
             log.info(
-                "  [%s] %s | %s | %s | %s",
+                "  [%s] %s | %s | %s | %s%s",
                 tag, tx["posted_at"][:10], tx["description"][:40], tx["amount"],
                 tx.get("category") or "(preserved)",
+                " [BIZ]" if tx.get("business") else "",
             )
         inserted, updated = 0, 0
         duplicate_pending_suspects = _find_duplicate_pending_suspects(db, truly_new)
