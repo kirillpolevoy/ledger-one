@@ -20,29 +20,30 @@ _TX_RE = re.compile(r'<tx id="([^"]+)"[^>]*><desc>(.*?)</desc></tx>')
 
 
 def _fake_anthropic(by_desc: dict[str, str]):
-    """Same tool_use response shape as tests/test_categorize.py, but answers per
-    description so one client can serve several classify calls."""
+    """Same structured-output response shape as tests/test_categorize.py, but
+    answers per description so one client can serve several classify calls."""
     client = MagicMock()
 
     def create(**kwargs):
         content = kwargs["messages"][0]["content"]
         block = MagicMock()
-        block.type = "tool_use"
-        block.input = {"classifications": {
-            tx_id: by_desc.get(desc, "Uncategorized") for tx_id, desc in _TX_RE.findall(content)
-        }}
+        block.type = "text"
+        block.text = json.dumps({"classifications": [
+            {"id": tx_id, "category": by_desc.get(desc, "Uncategorized")}
+            for tx_id, desc in _TX_RE.findall(content)
+        ]})
         resp = MagicMock()
         resp.content = [block]
-        resp.stop_reason = "tool_use"
+        resp.stop_reason = "end_turn"
         return resp
 
-    client.messages.create.side_effect = create
+    client.beta.messages.create.side_effect = create
     return client
 
 
 def _failing_anthropic():
     client = MagicMock()
-    client.messages.create.side_effect = anthropic_pkg.APIStatusError(
+    client.beta.messages.create.side_effect = anthropic_pkg.APIStatusError(
         message="overloaded", response=MagicMock(), body=None
     )
     return client
@@ -51,7 +52,7 @@ def _failing_anthropic():
 def _no_ai():
     """A client that must never be called — --apply works from the plan alone."""
     client = MagicMock()
-    client.messages.create.side_effect = AssertionError("AI called during a plan run")
+    client.beta.messages.create.side_effect = AssertionError("AI called during a plan run")
     return client
 
 
@@ -178,7 +179,7 @@ def test_apply_requires_a_plan(db):
         migrate_business_expense(db, categories=CATEGORIES, anthropic_client=client,
                                  model="m", apply=True)
     assert _snapshot(db) == before
-    client.messages.create.assert_not_called()
+    client.beta.messages.create.assert_not_called()
 
 
 def test_apply_commits_the_plan_without_calling_ai(db):
@@ -425,7 +426,7 @@ def test_override_without_rows_is_classified_via_synthetic_tx(db):
                "VALUES ('courtyard dayton', 'Business Expense')")
     client = _fake_anthropic(AI_ANSWERS)
     report = _dry(db, client)
-    content = client.messages.create.call_args.kwargs["messages"][0]["content"]
+    content = client.beta.messages.create.call_args.kwargs["messages"][0]["content"]
     assert 'amount="-1"><desc>courtyard dayton</desc>' in content
     assert report["overrides"] == [
         {"merchant_pattern": "courtyard dayton", "category": "Travel", "basis": "pattern"},
@@ -474,7 +475,7 @@ def test_refuses_while_business_expense_is_still_configured(db):
     with pytest.raises(ValueError, match="Business Expense"):
         _dry(db, client, categories=CATEGORIES + [BUSINESS_EXPENSE])
     assert _snapshot(db) == before
-    client.messages.create.assert_not_called()
+    client.beta.messages.create.assert_not_called()
 
 
 def test_rolls_back_when_business_expense_survives(db, monkeypatch):
@@ -505,7 +506,7 @@ def test_second_run_is_a_noop(db):
     assert report["counts"]["rows_migrated"] == 0
     assert report["counts"]["overrides_converted"] == 0
     assert report["counts"]["business_tagged_by_overrides"] == 0
-    client.messages.create.assert_not_called()
+    client.beta.messages.create.assert_not_called()
 
 
 def test_rerun_tags_rows_pulled_by_old_code_after_the_first_apply(db):

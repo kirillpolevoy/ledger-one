@@ -1,3 +1,4 @@
+import json
 import logging
 from collections.abc import Collection, Iterable
 from typing import Literal
@@ -8,23 +9,37 @@ from ledger_one.config import UNCATEGORIZED
 log = logging.getLogger(__name__)
 
 Source = Literal["override", "learned", "ai"]
-BATCH_SIZE = 250
+# ~45 output tokens per transaction at medium effort (reasoning + JSON); 100 keeps
+# a batch far below max_tokens, where truncation would mark it all Uncategorized.
+BATCH_SIZE = 100
 
-TOOL = {
-    "name": "classify_transactions",
-    "description": "Assign each transaction to exactly one allowed category.",
-    "input_schema": {
+EFFORT = "medium"
+# Server-side refusal fallback: a declined request re-runs on another model in
+# the same call instead of failing the batch.
+FALLBACK_BETA = "server-side-fallback-2026-07-01"
+
+
+def _output_schema(categories: list[str]) -> dict:
+    return {
         "type": "object",
         "properties": {
             "classifications": {
-                "type": "object",
-                "description": "Map of transaction id to category name.",
-                "additionalProperties": {"type": "string"},
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "category": {"type": "string", "enum": list(categories)},
+                    },
+                    "required": ["id", "category"],
+                    "additionalProperties": False,
+                },
             }
         },
         "required": ["classifications"],
-    },
-}
+        "additionalProperties": False,
+    }
+
 
 _UNSAFE_CHARS = str.maketrans({"<": " ", ">": " ", "`": " ", "\n": " ", "\r": " "})
 
@@ -117,7 +132,7 @@ def _fetch_learned(db, patterns: list[str]) -> dict[str, str]:
 def _build_system_prompt(categories: list[str]) -> str:
     return (
         "You categorize personal bank transactions into exactly one of the allowed categories.\n"
-        "Return results via the classify_transactions tool.\n"
+        "Return every transaction id with its category.\n"
         "\n"
         "Each transaction has an `amount` attribute.\n"
         "- NEGATIVE amount = money OUT (spending, bill, purchase).\n"
@@ -148,24 +163,38 @@ def _classify_batch(batch, categories, client, model) -> dict[str, tuple[str, So
     user_content = _build_user_content(batch)
     allowed = set(categories)
 
+    # Structured output instead of a forced tool call: Sonnet 5.5 rejects forced
+    # tool_choice, and the category enum makes invalid categories impossible.
+    output_config = {"format": {"type": "json_schema", "schema": _output_schema(categories)}}
+    extra = {}
+    if not model.startswith("claude-haiku"):
+        # Haiku 4.5 supports neither effort nor the server-side fallback.
+        output_config["effort"] = EFFORT
+        extra = {"betas": [FALLBACK_BETA], "extra_body": {"fallbacks": "default"}}
+
     try:
-        resp = client.messages.create(
+        resp = client.beta.messages.create(
             model=model,
-            max_tokens=4096,
+            max_tokens=16000,
             system=[{
                 "type": "text",
                 "text": system_prompt,
                 "cache_control": {"type": "ephemeral"},
             }],
-            tools=[TOOL],
-            tool_choice={"type": "tool", "name": "classify_transactions"},
             messages=[{"role": "user", "content": user_content}],
+            output_config=output_config,
+            **extra,
         )
     except (anthropic_pkg.APIStatusError, anthropic_pkg.APIConnectionError) as e:
         log.warning("Claude call failed, marking batch Uncategorized: %s", e)
         return {tx["id"]: (UNCATEGORIZED, "ai") for tx in batch}
 
-    mapping = _extract_classifications(resp)
+    if resp.stop_reason != "end_turn":
+        # refusal (even after the fallback) or max_tokens (truncated JSON)
+        log.warning("Claude stopped with %s, marking batch Uncategorized", resp.stop_reason)
+        return {tx["id"]: (UNCATEGORIZED, "ai") for tx in batch}
+
+    mapping = _parse_classifications(resp)
 
     out: dict[str, tuple[str, Source]] = {}
     for tx in batch:
@@ -176,11 +205,14 @@ def _classify_batch(batch, categories, client, model) -> dict[str, tuple[str, So
     return out
 
 
-def _extract_classifications(resp) -> dict:
-    for block in resp.content or []:
-        if getattr(block, "type", None) == "tool_use":
-            data = block.input or {}
-            classifications = data.get("classifications") or {}
-            if isinstance(classifications, dict):
-                return {k: v for k, v in classifications.items() if isinstance(v, str)}
-    return {}
+def _parse_classifications(resp) -> dict:
+    text = next((b.text for b in resp.content or [] if getattr(b, "type", None) == "text"), "")
+    try:
+        items = json.loads(text)["classifications"]
+    except (ValueError, KeyError, TypeError):
+        log.warning("Unparseable classification output, marking batch Uncategorized")
+        return {}
+    return {
+        str(i["id"]): i["category"] for i in items
+        if isinstance(i, dict) and isinstance(i.get("category"), str) and "id" in i
+    }

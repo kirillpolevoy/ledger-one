@@ -69,7 +69,7 @@ def test_pull_end_to_end_learned_cache_hit(db, tmp_path):
         days=7,
         categories_file=cats_file,
         anthropic_client=anthropic,
-        model="claude-haiku-4-5-20251001",
+        model="claude-sonnet-5-5",
         simplefin_fetcher=lambda url, days: (fake_accounts, fake_txns, []),
     )
     assert stats["posted_inserts"] == 1
@@ -111,7 +111,7 @@ def test_pull_inserts_pending_then_transitions_to_posted_preserving_category(db,
     stats1 = run_pull(
         db=db, access_url="https://fake", days=7,
         categories_file=cats_file, anthropic_client=anthropic,
-        model="claude-haiku-4-5-20251001",
+        model="claude-sonnet-5-5",
         simplefin_fetcher=lambda u, d: (fake_accounts, [pending_txn], []),
     )
     assert stats1["pending_inserts"] == 1
@@ -134,7 +134,7 @@ def test_pull_inserts_pending_then_transitions_to_posted_preserving_category(db,
     stats2 = run_pull(
         db=db, access_url="https://fake", days=7,
         categories_file=cats_file, anthropic_client=anthropic,
-        model="claude-haiku-4-5-20251001",
+        model="claude-sonnet-5-5",
         simplefin_fetcher=lambda u, d: (fake_accounts, [posted_txn], []),
     )
     assert stats2["pending_inserts"] == 0
@@ -177,7 +177,7 @@ def test_pull_transitions_on_flip_moment_even_if_payload_still_pending(db, tmp_p
     run_pull(
         db=db, access_url="https://fake", days=7,
         categories_file=cats_file, anthropic_client=anthropic,
-        model="claude-haiku-4-5-20251001",
+        model="claude-sonnet-5-5",
         simplefin_fetcher=lambda u, d: (fake_accounts, [pending], []),
     )
 
@@ -190,7 +190,7 @@ def test_pull_transitions_on_flip_moment_even_if_payload_still_pending(db, tmp_p
     stats = run_pull(
         db=db, access_url="https://fake", days=7,
         categories_file=cats_file, anthropic_client=anthropic,
-        model="claude-haiku-4-5-20251001",
+        model="claude-sonnet-5-5",
         simplefin_fetcher=lambda u, d: (fake_accounts, [flip], []),
     )
     assert stats["pending_to_posted_transitions"] == 1
@@ -221,7 +221,7 @@ def test_pull_flags_duplicate_pending_suspects_when_id_rotates(db, tmp_path):
     run_pull(
         db=db, access_url="https://fake", days=7,
         categories_file=cats_file, anthropic_client=anthropic,
-        model="claude-haiku-4-5-20251001",
+        model="claude-sonnet-5-5",
         simplefin_fetcher=lambda u, d: (fake_accounts, [pending], []),
     )
 
@@ -235,7 +235,7 @@ def test_pull_flags_duplicate_pending_suspects_when_id_rotates(db, tmp_path):
     stats = run_pull(
         db=db, access_url="https://fake", days=7,
         categories_file=cats_file, anthropic_client=anthropic,
-        model="claude-haiku-4-5-20251001",
+        model="claude-sonnet-5-5",
         simplefin_fetcher=lambda u, d: (fake_accounts, [posted_rotated], []),
     )
     assert stats["posted_inserts"] == 1  # inserted as new, because id doesn't match

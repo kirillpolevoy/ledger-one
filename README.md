@@ -13,7 +13,7 @@ A 3-tier categorization cascade:
 
 1. **Explicit overrides** (`category_overrides` table) — user rules that always win.
 2. **Learned patterns** (`merchant_categories` table) — built from your history, seeded optionally from a Copilot CSV export.
-3. **Claude Haiku** — fallback for genuinely novel merchants, prompt-cached so it's near-free.
+3. **Claude Sonnet 5.5** (medium effort, structured output) — fallback for genuinely novel merchants. Only merchants with no override or learned mapping reach it.
 
 ### Pending transactions
 
@@ -30,7 +30,7 @@ Schema: [`scripts/schema.sql`](scripts/schema.sql). Migrations: [`scripts/migrat
 - **Python 3.11+**
 - **Postgres 14+** (the learn trigger uses `REFERENCING NEW TABLE` which requires PG 14 or later; Neon's free tier runs PG 17)
 - **SimpleFIN Bridge account** (~$15/year)
-- **Anthropic API key** (Haiku categorization costs ~$0.10-0.20/month at typical volume)
+- **Anthropic API key** (Sonnet categorization costs well under $1/month at typical volume — only new merchants reach the model)
 
 ## 5-minute quickstart
 
