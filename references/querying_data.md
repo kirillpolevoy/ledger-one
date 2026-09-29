@@ -6,6 +6,8 @@ All queries run against your Postgres database directly (`psql "$DATABASE_URL"` 
 
 **Pending vs posted:** the `transactions.pending` column (BOOLEAN) distinguishes pending charges (visible in the bank app within minutes of swipe) from posted charges (finalized by the bank, 1–3 business days later). Most reporting queries below add `AND NOT pending` so they reflect settled activity only — pending amounts can shift (tips, FX conversion) or the row can vanish entirely: the pull deletes pendings the bank stops reporting (feed-absence reconciliation), because they either settled under a new id or the hold was released. A disappeared pending is expected behavior, not data loss. When you want real-time committed spend, drop the `AND NOT pending` filter.
 
+**Business vs personal:** `transactions.business` (BOOLEAN) marks work expenses — reimbursed or billed elsewhere. It's independent of `category`: a business Uber is still `Transportation`. Add `AND NOT business` to personal-spend totals. "Business spend" is `business AND category NOT IN ('Uncategorized', 'Income', 'Transfers')`: only business-tagged rows in those three categories are left out of it. A business-tagged merchant refund keeps its spending category (a +$150 hotel refund stays `Travel`), so it nets against business spend — it is neither income nor part of personal `Travel`. Per-category personal breakdowns exclude business spend with `AND NOT (business AND category NOT IN ('Uncategorized', 'Income', 'Transfers'))`.
+
 ## Pending quick views
 
 ```sql
@@ -33,6 +35,27 @@ WHERE posted_at >= date_trunc('month', now()) AND amount < 0 AND NOT pending
 GROUP BY category ORDER BY spent DESC;
 ```
 
+## Personal vs business spend this month
+
+```sql
+-- Personal spend by category (the default for budgeting). Business spend is
+-- excluded; a business-tagged Transfers debit still counts under Transfers.
+-- `amount < 0` leaves refunds out entirely (a business refund nets against
+-- business spend instead).
+SELECT category, SUM(-amount) AS spent
+FROM transactions
+WHERE posted_at >= date_trunc('month', now()) AND amount < 0 AND NOT pending
+  AND NOT (business AND category NOT IN ('Uncategorized', 'Income', 'Transfers'))
+GROUP BY category ORDER BY spent DESC;
+
+-- Business spend only (e.g. for rebilling), itemized. Refunds show as negative.
+SELECT posted_at::date, description, category, -amount AS amount
+FROM transactions
+WHERE business AND category NOT IN ('Uncategorized', 'Income', 'Transfers')
+  AND posted_at >= date_trunc('month', now()) AND NOT pending
+ORDER BY posted_at;
+```
+
 ## Pace-matched MTD vs last month same day
 
 ```sql
@@ -42,7 +65,7 @@ SELECT
   SUM(CASE WHEN posted_at >= date_trunc('month', now() - interval '1 month')
            AND posted_at <  date_trunc('month', now() - interval '1 month') + (SELECT day FROM d) * interval '1 day'
            THEN -amount ELSE 0 END) AS last_month_same_pace
-FROM transactions WHERE amount < 0 AND NOT pending;
+FROM transactions WHERE amount < 0 AND NOT pending AND NOT business;
 ```
 
 ## Top 10 merchants this month
