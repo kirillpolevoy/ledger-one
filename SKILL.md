@@ -34,11 +34,12 @@ Never ask the user to paste raw secrets into chat. `SIMPLEFIN_ACCESS_URL`, `DATA
 
 ## Ongoing
 - **Add an override:** `python scripts/ledger_cli.py override add "STARBUCKS" "Coffee"`
-- **Recategorize a transaction:** just `UPDATE transactions SET category = '...'`. The DB trigger updates the learned mapping automatically.
+- **Recategorize a transaction:** just `UPDATE transactions SET category = '...', categorization_source = 'manual'`. The DB trigger updates the learned mapping automatically, and later overrides leave manual rows alone.
+- **Business expenses:** business is a flag, not a category — `UPDATE transactions SET business = true WHERE id = ... AND NOT pending` (category stays what it is; the learned mapping is untouched). For a merchant that's always business: `python scripts/ledger_cli.py override add "DAYTON EXPRESS" "Travel" --business`. Personal-spend queries add `AND NOT business`. Coming from a `Business Expense` category? Deploy this code first, then run `python scripts/migrate_business_expense.py` (dry run; writes a plan to review) and `--apply --plan business_migration_plan.json` to commit it — steps in `references/deploy_cron.md`.
 - **Pending vs posted:** each row has a `pending BOOLEAN`. Pending charges appear the moment they're swiped; when the bank reuses the id at settlement, the same row flips to `pending=false` (user-set category preserved). Add `AND NOT pending` to queries that should only reflect settled spend.
 - **Vanished pendings are expected, not data loss:** when the bank posts under a *new* id (or releases the hold), the pull deletes the stranded pending once it's absent from the SimpleFIN feed (feed-absence reconciliation). The posted charge, if any, is already in the ledger under its own id. Dropped rows are logged per pull and counted in the `pendings_dropped` stat.
 - **Weekly digest:** `.github/workflows/digest.yml` curls the companion-layer digest endpoint Mondays 19:00 UTC. Manual runs from the Actions tab support a `dry_run` input (no email, no `digest_runs` row).
 - **Query data:** `references/querying_data.md`.
 
 ## Extending
-See `references/extending.md` — a separate app or analytics repo can import `ledger_one`, read from the same DB, and only write to `category_overrides`.
+See `references/extending.md` — a separate app or analytics repo can import `ledger_one`, read from the same DB, and only write to `category_overrides` (plus `transactions.category` / `transactions.business` updates).

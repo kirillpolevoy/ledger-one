@@ -33,6 +33,8 @@ def upsert_transactions(db: psycopg.Connection, txns: list[dict]) -> tuple[int, 
     already-posted rows (pending=false in DB) are NEVER mutated by this path —
     only pending rows can transition to posted. Inserts and pending→posted
     updates both go through here.
+
+    `business` is written on INSERT only; transitions keep the stored flag.
     """
     if not txns:
         return (0, 0)
@@ -41,7 +43,7 @@ def upsert_transactions(db: psycopg.Connection, txns: list[dict]) -> tuple[int, 
             t["id"], t["account_id"], t["amount"], t["description"],
             t["merchant_pattern"], t["category"], t["posted_at"],
             json.dumps(t.get("raw_payload") or {}), t["source"],
-            bool(t.get("pending", False)),
+            bool(t.get("pending", False)), bool(t.get("business", False)),
         )
         for t in txns
     ]
@@ -49,8 +51,8 @@ def upsert_transactions(db: psycopg.Connection, txns: list[dict]) -> tuple[int, 
         INSERT INTO transactions (
           id, account_id, amount, description, merchant_pattern,
           category, posted_at, raw_payload, categorized_at,
-          categorization_source, pending
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, now(), %s, %s)
+          categorization_source, pending, business
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, now(), %s, %s, %s)
         ON CONFLICT (id) DO UPDATE SET
           pending = EXCLUDED.pending,
           posted_at = EXCLUDED.posted_at,
@@ -66,6 +68,8 @@ def upsert_transactions(db: psycopg.Connection, txns: list[dict]) -> tuple[int, 
     # or concurrent caller from clobbering a finalized row's posted_at/amount.
     # Guard-blocked rows return an empty RETURNING set and contribute 0 to both
     # counters; all other input rows produce exactly one RETURNING row.
+    # `business` is deliberately absent from the UPDATE SET list (like category):
+    # a tag applied while the row was pending must survive the transition.
     inserted = 0
     updated = 0
     with db.cursor() as cur:

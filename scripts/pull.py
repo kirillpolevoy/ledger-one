@@ -27,7 +27,7 @@ def main():
     access_url = _require("SIMPLEFIN_ACCESS_URL")
     db_url = _require("DATABASE_URL")
     _require("ANTHROPIC_API_KEY")
-    model = os.environ.get("LEDGER_CATEGORIZATION_MODEL", "claude-haiku-4-5-20251001")
+    model = os.environ.get("LEDGER_CATEGORIZATION_MODEL", "claude-sonnet-5-5")
 
     if not args.categories.exists():
         print(f"Missing {args.categories}. Copy config/categories.yaml.example.", file=sys.stderr)

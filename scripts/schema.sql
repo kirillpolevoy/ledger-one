@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS transactions (
   categorized_at TIMESTAMPTZ,
   categorization_source TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
-  pending BOOLEAN NOT NULL DEFAULT false
+  pending BOOLEAN NOT NULL DEFAULT false,
+  business BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE TABLE IF NOT EXISTS merchant_categories (
@@ -32,7 +33,8 @@ CREATE TABLE IF NOT EXISTS merchant_categories (
 CREATE TABLE IF NOT EXISTS category_overrides (
   merchant_pattern TEXT PRIMARY KEY,
   category TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT now(),
+  business BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE INDEX IF NOT EXISTS idx_transactions_posted_at ON transactions(posted_at);
@@ -40,6 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category);
 CREATE INDEX IF NOT EXISTS idx_transactions_account_posted ON transactions(account_id, posted_at);
 CREATE INDEX IF NOT EXISTS idx_transactions_merchant_pattern ON transactions(merchant_pattern);
 CREATE INDEX IF NOT EXISTS idx_transactions_pending ON transactions (pending) WHERE pending = true;
+CREATE INDEX IF NOT EXISTS idx_transactions_business ON transactions (business) WHERE business;
 
 CREATE OR REPLACE FUNCTION ledger_one_learn_on_update()
 RETURNS TRIGGER AS $$
