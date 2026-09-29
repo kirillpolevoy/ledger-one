@@ -199,47 +199,25 @@ def test_pull_transitions_on_flip_moment_even_if_payload_still_pending(db, tmp_p
 
 def test_pull_flags_duplicate_pending_suspects_when_id_rotates(db, tmp_path):
     """If Chase re-issues the id on pending→posted, the new posted row looks like
-    truly_new to us. The heuristic should flag it against the lingering pending."""
-    cats_file = tmp_path / "categories.yaml"
-    cats_file.write_text("categories:\n  - Shopping\n")
-    db.execute(
-        "INSERT INTO merchant_categories (merchant_pattern, category) "
-        "VALUES ('amazon.com', 'Shopping')"
-    )
-    fake_accounts = [{
-        "id": "a1", "name": "Chase", "institution": "Chase",
-        "currency": "USD", "balance": "0",
-        "balance_date": "2026-04-18T18:00:00+00:00",
-    }]
-    # Seed a pending row with id=tx-pending-abc
-    pending = {
-        "id": "tx-pending-abc", "account_id": "a1", "amount": "-42.00",
-        "description": "AMAZON.COM", "posted_at": "2026-04-17T14:00:00+00:00",
-        "pending": True, "has_real_posted": False, "raw_payload": {},
-    }
-    anthropic = MagicMock()
-    run_pull(
-        db=db, access_url="https://fake", days=7,
-        categories_file=cats_file, anthropic_client=anthropic,
-        model="claude-haiku-4-5-20251001",
-        simplefin_fetcher=lambda u, d: (fake_accounts, [pending], []),
-    )
+    truly_new to us. The heuristic should flag it against the lingering pending.
+
+    Dates are relative to now: the heuristic only looks back 3 days from now()."""
+    cats_file = _seed_amazon(db, tmp_path)
+    now = datetime.now(timezone.utc)
+    acct = _fresh_account(now)
+    pending = _txn("tx-pending-abc", posted_at=(now - timedelta(days=1)).isoformat(),
+                   pending=True, has_real_posted=False, amount="-42.00")
+    _run(db, cats_file, lambda u, d: (acct, [pending], []))
 
     # Now a posted row with a DIFFERENT id but same (account_id, amount, merchant_pattern)
-    posted_rotated = {
-        "id": "tx-posted-xyz",  # different id!
-        "account_id": "a1", "amount": "-42.00",
-        "description": "AMAZON.COM", "posted_at": "2026-04-18T08:00:00+00:00",
-        "pending": False, "has_real_posted": True, "raw_payload": {},
-    }
-    stats = run_pull(
-        db=db, access_url="https://fake", days=7,
-        categories_file=cats_file, anthropic_client=anthropic,
-        model="claude-haiku-4-5-20251001",
-        simplefin_fetcher=lambda u, d: (fake_accounts, [posted_rotated], []),
-    )
+    posted_rotated = _txn("tx-posted-xyz", posted_at=now.isoformat(),
+                          pending=False, has_real_posted=True, amount="-42.00")
+    stats = _run(db, cats_file, lambda u, d: (acct, [posted_rotated], []))
     assert stats["posted_inserts"] == 1  # inserted as new, because id doesn't match
     assert stats["duplicate_pending_suspects"] == 1  # BUT flagged
+    # Same pull also reconciles the stranded pending away; the flag above only
+    # works because the suspect check runs before that DELETE.
+    assert stats["pendings_dropped"] == 1
 
 
 def test_pull_drops_pending_absent_from_feed_within_window(db, tmp_path):
