@@ -405,3 +405,81 @@ def test_classify_txns_buckets_correctly():
     assert [t["id"] for t in already_seen] == [
         "in-db-pending-still-pending", "in-db-posted",
     ]
+
+
+def test_pull_sets_business_from_override(db, tmp_path):
+    """A truly-new charge from a merchant whose override has business=true is
+    tagged business on insert; other merchants default to personal."""
+    cats_file = tmp_path / "categories.yaml"
+    cats_file.write_text("categories:\n  - Travel\n  - Coffee\n")
+    db.execute(
+        "INSERT INTO category_overrides (merchant_pattern, category, business) "
+        "VALUES ('dayton express', 'Travel', true), ('starbucks', 'Coffee', false)"
+    )
+    now = datetime.now(timezone.utc)
+    txns = [
+        _txn("biz", posted_at=now.isoformat(), pending=False, has_real_posted=True,
+             desc="DAYTON EXPRESS"),
+        _txn("personal", posted_at=now.isoformat(), pending=False, has_real_posted=True,
+             desc="STARBUCKS #1234"),
+    ]
+    _run(db, cats_file, lambda u, d: (_fresh_account(now), txns, []))
+    rows = dict(db.execute("SELECT id, business FROM transactions").fetchall())
+    assert rows == {"biz": True, "personal": False}
+
+
+def test_pull_does_not_set_business_from_learned(db, tmp_path):
+    """Learned mappings carry category only. A merchant with past business
+    charges (but no business override) still lands as personal."""
+    cats_file = _seed_amazon(db, tmp_path)
+    now = datetime.now(timezone.utc)
+    acct = _fresh_account(now)
+    first = _txn("t1", posted_at=now.isoformat(), pending=False, has_real_posted=True)
+    _run(db, cats_file, lambda u, d: (acct, [first], []))
+    db.execute("UPDATE transactions SET business = true WHERE id = 't1'")
+
+    second = _txn("t2", posted_at=now.isoformat(), pending=False, has_real_posted=True)
+    stats = _run(db, cats_file, lambda u, d: (acct, [first, second], []))
+    assert stats["learned_matches"] == 1
+    assert db.execute("SELECT business FROM transactions WHERE id='t2'").fetchone() == (False,)
+
+
+def test_pull_transition_preserves_business(db, tmp_path):
+    """A pending tagged business (e.g. by an override's retro-tag) keeps the
+    tag when it posts under the same id."""
+    cats_file = _seed_amazon(db, tmp_path)
+    now = datetime.now(timezone.utc)
+    acct = _fresh_account(now)
+    pending = _txn("p1", posted_at=(now - timedelta(days=1)).isoformat(),
+                   pending=True, has_real_posted=False)
+    _run(db, cats_file, lambda u, d: (acct, [pending], []))
+    db.execute("UPDATE transactions SET business = true WHERE id = 'p1'")
+
+    posted = _txn("p1", posted_at=now.isoformat(), pending=False, has_real_posted=True)
+    stats = _run(db, cats_file, lambda u, d: (acct, [posted], []))
+    assert stats["pending_to_posted_transitions"] == 1
+    assert db.execute(
+        "SELECT pending, business FROM transactions WHERE id='p1'"
+    ).fetchone() == (False, True)
+
+
+def test_pull_dry_run_marks_business_rows(db, tmp_path, caplog):
+    cats_file = tmp_path / "categories.yaml"
+    cats_file.write_text("categories:\n  - Travel\n  - Coffee\n")
+    db.execute(
+        "INSERT INTO category_overrides (merchant_pattern, category, business) "
+        "VALUES ('dayton express', 'Travel', true), ('starbucks', 'Coffee', false)"
+    )
+    now = datetime.now(timezone.utc)
+    txns = [
+        _txn("biz", posted_at=now.isoformat(), pending=False, has_real_posted=True,
+             desc="DAYTON EXPRESS"),
+        _txn("personal", posted_at=now.isoformat(), pending=False, has_real_posted=True,
+             desc="STARBUCKS #1234"),
+    ]
+    with caplog.at_level(logging.INFO, logger="ledger_one.pull"):
+        _run(db, cats_file, lambda u, d: (_fresh_account(now), txns, []), dry_run=True)
+    lines = [r.getMessage() for r in caplog.records]
+    assert any("DAYTON EXPRESS" in m and "[BIZ]" in m for m in lines)
+    assert any("STARBUCKS" in m and "[BIZ]" not in m for m in lines)
+    assert db.execute("SELECT count(*) FROM transactions").fetchone() == (0,)

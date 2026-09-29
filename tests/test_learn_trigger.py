@@ -39,3 +39,18 @@ def test_trigger_bulk_update_single_upsert_per_pattern(db):
         "SELECT category FROM merchant_categories WHERE merchant_pattern='starbucks'"
     ).fetchone()
     assert row == ("Coffee",)
+
+def test_business_update_does_not_touch_learned(db):
+    """`business` is who pays, not what it is — tagging never feeds the learned
+    mapping, so the next charge from the merchant isn't nudged either way."""
+    _seed(db)
+    db.execute(
+        "INSERT INTO merchant_categories (merchant_pattern, category, last_updated) "
+        "VALUES ('uber trip', 'Transportation', '2026-01-01T00:00:00+00:00')"
+    )
+    _tx(db, "t1", "uber trip", "Transportation")
+    _tx(db, "t2", "lyft ride", "Transportation")
+    before = db.execute("SELECT * FROM merchant_categories").fetchall()
+    db.execute("UPDATE transactions SET business = true")
+    assert db.execute("SELECT * FROM merchant_categories").fetchall() == before
+    assert [r[0] for r in before] == ["uber trip"]  # no row learned for lyft ride
