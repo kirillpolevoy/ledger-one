@@ -49,6 +49,7 @@ Two GitHub Actions workflows ship with the repo:
 
 - **Daily pull** ([`.github/workflows/pull.yml`](.github/workflows/pull.yml)) — 18:00 UTC, runs `pull.py --days 32`. The 32-day window is what lets pending reconciliation trust "absent from feed = settled"; keep it if you adjust the schedule. Your category list reaches CI via a `CATEGORIES_YAML` repo secret (the run fails if it's unset). Setup: [`references/deploy_cron.md`](references/deploy_cron.md).
 - **Weekly digest trigger** ([`.github/workflows/digest.yml`](.github/workflows/digest.yml)) — Mondays 19:00 UTC. This repo only fires the cron: it curls a digest endpoint you host in your companion layer (see Extending), authenticated via two repo secrets (`LEDGER_DIGEST_URL`, `LEDGER_DIGEST_CRON_SECRET`). If you don't run a digest, delete the workflow or disable it in the Actions tab — with the secrets unset it fails loudly rather than silently skipping.
+- **Monthly review trigger** ([`.github/workflows/monthly.yml`](.github/workflows/monthly.yml)) — the 3rd of each month, 19:00 UTC, once the closed month's pendings have settled. Same shape as the digest trigger: it curls a review endpoint in your companion layer (`LEDGER_MONTHLY_URL`, reusing `LEDGER_DIGEST_CRON_SECRET`). Delete or disable it if you don't run one.
 
 Never paste `SIMPLEFIN_ACCESS_URL`, `DATABASE_URL`, or API keys into chat or commit them to git. Put them directly into local env files or your deployment secret store.
 See [`SECURITY.md`](SECURITY.md) for reporting and secret-handling guidance.

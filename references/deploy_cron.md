@@ -1,4 +1,4 @@
-# Deploying the daily pull and weekly digest
+# Deploying the daily pull, weekly digest, and monthly review
 
 ## Option 1: GitHub Actions (recommended)
 
@@ -62,6 +62,18 @@ Setup:
 3. Verify with a manual run from the Actions tab using the `dry_run` input — it appends `?dryRun=true`, so no email is sent and no `digest_runs` row is written. Scheduled runs always hit the live path.
 
 Not running a digest? Delete `digest.yml` or disable the workflow in the Actions tab — with the secrets unset it fails loudly (red run) rather than silently skipping.
+
+## Monthly review trigger
+
+`.github/workflows/monthly.yml` fires on the 3rd of each month at 19:00 UTC and curls a review endpoint in your companion layer, which reviews the month that just closed. The 3rd, not the 1st: charges from the month's last days are still pending on the 1st, and the review counts settled spend only. Like the digest trigger, it runs no review logic itself.
+
+Setup:
+
+1. Deploy a monthly review endpoint in your companion app.
+2. Add one repo secret, `LEDGER_MONTHLY_URL` (the endpoint URL). It reuses `LEDGER_DIGEST_CRON_SECRET` as its bearer.
+3. Verify with a manual run from the Actions tab: `dry_run` appends `?dryRun=true` (nothing is sent; the log prints the totals and the analysis), and `month` (YYYY-MM) re-runs a past closed month.
+
+Not running a review? Delete `monthly.yml` or disable it in the Actions tab — with `LEDGER_MONTHLY_URL` unset it fails loudly.
 
 ## Upgrading to the `business` flag
 

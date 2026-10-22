@@ -26,4 +26,4 @@ A successful pull ends with one line — `Pull complete: {...stats...}` — and 
 
 ## Automation
 
-Two GitHub Actions workflows: the daily pull ([.github/workflows/pull.yml](.github/workflows/pull.yml), 18:00 UTC) and a weekly digest trigger ([.github/workflows/digest.yml](.github/workflows/digest.yml), Mondays 19:00 UTC) that curls a companion-layer endpoint. The digest logic, email delivery, and `digest_runs` table live in the companion repo — this repo only fires the cron.
+Three GitHub Actions workflows: the daily pull ([.github/workflows/pull.yml](.github/workflows/pull.yml), 18:00 UTC), a weekly digest trigger ([.github/workflows/digest.yml](.github/workflows/digest.yml), Mondays 19:00 UTC), and a monthly review trigger ([.github/workflows/monthly.yml](.github/workflows/monthly.yml), the 3rd at 19:00 UTC, reviewing the month that just closed). Both triggers curl companion-layer endpoints; the digest/review logic, email delivery, and `digest_runs` table live in the companion repo — this repo only fires the cron.
