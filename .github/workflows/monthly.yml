@@ -1,0 +1,71 @@
+name: Monthly review
+on:
+  schedule:
+    - cron: "0 19 3 * *"  # 3rd of the month, 19:00 UTC — the closed month's last pendings have settled, and it's an hour after the daily pull.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Skip the send (appends ?dryRun=true — returns the rendered email, sends nothing)"
+        type: boolean
+        default: false
+      month:
+        description: "Closed month to review as YYYY-MM (default: last month)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  monthly:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger monthly review endpoint
+        env:
+          MONTHLY_URL: ${{ secrets.LEDGER_MONTHLY_URL }}
+          CRON_SECRET: ${{ secrets.LEDGER_DIGEST_CRON_SECRET }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          MONTH: ${{ inputs.month }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MONTHLY_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::LEDGER_MONTHLY_URL and LEDGER_DIGEST_CRON_SECRET must be set as repo secrets."
+            exit 1
+          fi
+          # Inputs are only set on workflow_dispatch — scheduled runs review
+          # last month on the live path.
+          QUERY=""
+          if [ "${DRY_RUN:-false}" = "true" ]; then
+            QUERY="dryRun=true"
+            echo "Dry run — appending ?dryRun=true. No email will be sent."
+          fi
+          if [ -n "${MONTH:-}" ]; then
+            if ! [[ "${MONTH}" =~ ^[0-9]{4}-[0-9]{2}$ ]]; then
+              echo "::error::month must be YYYY-MM"
+              exit 1
+            fi
+            QUERY="${QUERY:+${QUERY}&}month=${MONTH}"
+          fi
+          URL="${MONTHLY_URL}${QUERY:+?${QUERY}}"
+          # The endpoint runs an Opus call at high effort; --max-time 300
+          # matches its maxDuration. --fail-with-body prints the error body.
+          curl --fail-with-body --silent --show-error --max-time 300 \
+            -H "Authorization: Bearer ${CRON_SECRET}" -o response.json "${URL}" \
+            || { cat response.json 2>/dev/null; exit 1; }
+          # A dry run's body carries the rendered HTML — print the readable parts.
+          if [ "${DRY_RUN:-false}" = "true" ]; then
+            jq '{month, subject, totals: .data.totals, analysis}' response.json
+          else
+            cat response.json
+          fi
+
+  keepalive:
+    # Resets GitHub's 60-day inactivity auto-disable for this workflow — see
+    # the matching job in pull.yml. Only ever re-enables itself.
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - run: gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/monthly.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}
